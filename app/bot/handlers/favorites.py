@@ -3,7 +3,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import PaginationCallback
 from app.bot.keyboards.common import get_back_keyboard
@@ -53,7 +52,7 @@ async def _edit_or_resend_message(
 @favorites_router.message(Command("favorites"))
 async def handle_favorites_command(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
@@ -62,7 +61,6 @@ async def handle_favorites_command(
         await state.clear()
 
     user_id: int = user.id if user is not None else 0
-    recipe_service: RecipeService = RecipeService(session=session)
     paginated: PaginatedResponse[RecipeDTO] = await recipe_service.get_user_favorites(
         user_id=user_id,
         pagination=PaginationParams(page=1, page_size=5),
@@ -92,12 +90,11 @@ async def handle_favorites_command(
 async def handle_favorites_pagination(
     callback: CallbackQuery,
     callback_data: PaginationCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     user_id: int = user.id if user is not None else 0
-    recipe_service: RecipeService = RecipeService(session=session)
     paginated: PaginatedResponse[RecipeDTO] = await recipe_service.get_user_favorites(
         user_id=user_id,
         pagination=PaginationParams(page=callback_data.page, page_size=5),

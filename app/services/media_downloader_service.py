@@ -113,14 +113,24 @@ class MediaDownloaderService:
             except (OSError, ValueError, RuntimeError, ImportError):
                 return None
 
-        matching_files: list[Path] = list(
-            self.temp_base_dir.glob(f"{unique_id}_*"),
+        def _find_matching_files() -> list[Path]:
+            return list(self.temp_base_dir.glob(f"{unique_id}_*"))
+
+        matching_files: list[Path] = await asyncio.to_thread(
+            _find_matching_files,
         )
         if not matching_files:
             return None
 
         downloaded_file: Path = matching_files[0]
-        file_size: int = downloaded_file.stat().st_size
+
+        def _get_file_size(file: Path) -> int:
+            return file.stat().st_size
+
+        file_size: int = await asyncio.to_thread(
+            _get_file_size,
+            downloaded_file,
+        )
 
         return DownloadedMediaResult(
             file_path=downloaded_file,
@@ -131,8 +141,11 @@ class MediaDownloaderService:
         )
 
     @staticmethod
-    def cleanup(file_path: Path | str) -> None:
-        with contextlib.suppress(OSError):
-            path = Path(file_path)
-            if path.exists() and path.is_file():
-                path.unlink()
+    async def cleanup(file_path: Path | str) -> None:
+        def _do_cleanup() -> None:
+            with contextlib.suppress(OSError):
+                path = Path(file_path)
+                if path.exists() and path.is_file():
+                    path.unlink()
+
+        await asyncio.to_thread(_do_cleanup)

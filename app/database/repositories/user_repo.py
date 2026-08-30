@@ -32,8 +32,10 @@ class UserRepo(BaseRepo):
             .returning(User)
         )
         result = await self.session.scalars(stmt)
+        user: User = result.one()
+        await self.session.commit()
 
-        return result.one()
+        return user
 
     async def update_language(
         self,
@@ -47,8 +49,11 @@ class UserRepo(BaseRepo):
             .returning(User)
         )
         result = await self.session.scalars(stmt)
+        user: User | None = result.one_or_none()
+        if user is not None:
+            await self.session.commit()
 
-        return result.one_or_none()
+        return user
 
     async def get_all(self) -> list[User]:
         stmt = select(User).order_by(User.id.asc())

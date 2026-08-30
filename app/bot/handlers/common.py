@@ -182,7 +182,6 @@ async def handle_language_select(
     if user is not None:
         user_repo: UserRepo = UserRepo(session)
         await user_repo.update_language(user.id, new_locale)
-        await session.commit()
 
     updated_text: str = t("language_updated", locale=new_locale)
     menu_keyboard = get_main_menu_keyboard(locale=new_locale, is_admin=is_admin)

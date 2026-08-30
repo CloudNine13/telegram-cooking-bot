@@ -96,6 +96,7 @@ class CategoryService:
             raise ValueError(
                 "Either category_repo or session must be provided",
             )
+        self.session: AsyncSession = self.category_repo.session
 
     async def get_top_level_categories(self) -> list[CategoryDTO]:
         categories: list[Category] = await self.category_repo.get_top_level_categories()
@@ -104,7 +105,7 @@ class CategoryService:
 
     async def get_subcategories(self, parent_id: int) -> list[CategoryDTO]:
         subcategories: list[Category] = await self.category_repo.get_subcategories(
-            parent_id
+            parent_id,
         )
 
         return [CategoryDTO.model_validate(c) for c in subcategories]
@@ -135,6 +136,7 @@ class CategoryService:
 
     async def create_category(self, dto: CategoryCreateDTO) -> CategoryDTO:
         category: Category = await self.category_repo.create(dto)
+        await self.session.commit()
 
         return CategoryDTO.model_validate(category)
 
@@ -150,10 +152,16 @@ class CategoryService:
         if category is None:
             return None
 
+        await self.session.commit()
+
         return CategoryDTO.model_validate(category)
 
     async def delete_category(self, category_id: int) -> bool:
-        return await self.category_repo.delete(category_id)
+        result: bool = await self.category_repo.delete(category_id)
+        if result:
+            await self.session.commit()
+
+        return result
 
     async def seed_default_categories(self) -> list[CategoryDTO]:
         for cat_data in DEFAULT_CATEGORY_TAXONOMY:
@@ -183,5 +191,7 @@ class CategoryService:
                         parent_id=parent.id,
                     )
                     await self.category_repo.create(sub_dto)
+
+        await self.session.commit()
 
         return await self.get_category_tree()

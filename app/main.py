@@ -20,11 +20,11 @@ from app.bot.handlers import main_router
 from app.bot.middlewares import (
     AuthMiddleware,
     DbSessionMiddleware,
+    ServicesMiddleware,
     UserI18nMiddleware,
 )
 from app.core.config import Settings, get_settings
 from app.core.seeder import seed_initial_categories
-from app.database.models.base import Base
 from app.database.session import (
     get_async_engine,
     get_session_maker,
@@ -45,11 +45,7 @@ async def create_fsm_storage(redis_url: str) -> BaseStorage:
 
 
 async def on_startup(bot: Bot) -> None:
-    engine: AsyncEngine = get_async_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    session_maker: async_sessionmaker[AsyncSession] = get_session_maker(engine)
+    session_maker: async_sessionmaker[AsyncSession] = get_session_maker()
     async with session_maker() as session:
         await seed_initial_categories(session)
 
@@ -75,6 +71,7 @@ async def main() -> None:
     dp.update.outer_middleware(
         DbSessionMiddleware(session_maker=session_maker),
     )
+    dp.update.outer_middleware(ServicesMiddleware())
     dp.update.outer_middleware(AuthMiddleware())
     dp.update.outer_middleware(UserI18nMiddleware())
 

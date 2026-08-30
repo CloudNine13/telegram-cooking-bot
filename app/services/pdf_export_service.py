@@ -39,6 +39,15 @@ class PdfExportService:
 
         return None
 
+    @staticmethod
+    def _get_output_pdf_size(path: Path) -> int | None:
+        if path.exists() and path.is_file():
+            size: int = path.stat().st_size
+            if size > 0:
+                return size
+
+        return None
+
     async def url_to_pdf(
         self,
         url: str,
@@ -82,15 +91,16 @@ class PdfExportService:
 
                 return None
 
-            if (
-                process.returncode == 0
-                and output_pdf.exists()
-                and output_pdf.stat().st_size > 0
-            ):
+            pdf_size: int | None = await asyncio.to_thread(
+                self._get_output_pdf_size,
+                output_pdf,
+            )
+
+            if process.returncode == 0 and pdf_size is not None:
                 return ExportedPdfResult(
                     file_path=output_pdf,
                     filename=output_pdf.name,
-                    file_size_bytes=output_pdf.stat().st_size,
+                    file_size_bytes=pdf_size,
                 )
 
         except (OSError, ValueError, RuntimeError, asyncio.SubprocessError):
@@ -210,7 +220,11 @@ li {{
 """
 
         try:
-            temp_html_path.write_text(html_content, encoding="utf-8")
+
+            def _write_temp_html(path: Path, content: str) -> None:
+                path.write_text(content, encoding="utf-8")
+
+            await asyncio.to_thread(_write_temp_html, temp_html_path, html_content)
 
             cmd = [
                 chrome_path,
@@ -239,29 +253,37 @@ li {{
 
                 return None
 
-            if (
-                process.returncode == 0
-                and output_pdf_path.exists()
-                and output_pdf_path.stat().st_size > 0
-            ):
+            pdf_size: int | None = await asyncio.to_thread(
+                self._get_output_pdf_size,
+                output_pdf_path,
+            )
+
+            if process.returncode == 0 and pdf_size is not None:
                 return ExportedPdfResult(
                     file_path=output_pdf_path,
                     filename=f"{recipe.id}_{title.replace(' ', '_')}.pdf",
-                    file_size_bytes=output_pdf_path.stat().st_size,
+                    file_size_bytes=pdf_size,
                 )
 
         except (OSError, ValueError, RuntimeError, asyncio.SubprocessError):
             return None
         finally:
-            with contextlib.suppress(OSError):
-                if temp_html_path.exists():
-                    temp_html_path.unlink()
+
+            def _remove_temp_file(path: Path) -> None:
+                with contextlib.suppress(OSError):
+                    if path.exists():
+                        path.unlink()
+
+            await asyncio.to_thread(_remove_temp_file, temp_html_path)
 
         return None
 
     @staticmethod
-    def cleanup(file_path: Path | str) -> None:
-        with contextlib.suppress(OSError):
-            path = Path(file_path)
-            if path.exists() and path.is_file():
-                path.unlink()
+    async def cleanup(file_path: Path | str) -> None:
+        def _do_cleanup() -> None:
+            with contextlib.suppress(OSError):
+                path = Path(file_path)
+                if path.exists() and path.is_file():
+                    path.unlink()
+
+        await asyncio.to_thread(_do_cleanup)

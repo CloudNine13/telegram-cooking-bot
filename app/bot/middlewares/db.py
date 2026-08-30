@@ -13,7 +13,7 @@ class DbSessionMiddleware(BaseMiddleware):
         self,
         session_maker: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
-        self.session_maker: async_sessionmaker[AsyncSession] = (
+        self.session_pool: async_sessionmaker[AsyncSession] = (
             session_maker if session_maker is not None else get_session_maker()
         )
 
@@ -23,13 +23,7 @@ class DbSessionMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        async with self.session_maker() as session:
+        async with self.session_pool() as session:
             data["session"] = session
-            try:
-                result: Any = await handler(event, data)
-                await session.commit()
 
-                return result
-            except Exception:
-                await session.rollback()
-                raise
+            return await handler(event, data)

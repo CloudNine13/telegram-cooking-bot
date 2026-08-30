@@ -6,7 +6,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.admin import IsAdminFilter
 from app.bot.keyboards.admin import (
@@ -113,7 +112,7 @@ def _parse_wizard_ingredients(
 
 
 async def _save_wizard_recipe(
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
 ) -> RecipeDTO:
     data = await state.get_data()
@@ -137,9 +136,7 @@ async def _save_wizard_recipe(
         ingredients=ingredients,
     )
 
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO = await recipe_service.create_recipe(dto)
-    await session.commit()
     await state.clear()
 
     return recipe
@@ -270,7 +267,7 @@ async def handle_wizard_title_en(
 @admin_router.message(RecipeCreateWizard.title_ru)
 async def handle_wizard_title_ru(
     message: Message,
-    session: AsyncSession,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -281,7 +278,6 @@ async def handle_wizard_title_ru(
     await state.update_data(title_ru=title_ru)
     await state.set_state(RecipeCreateWizard.category_id)
 
-    category_service: CategoryService = CategoryService(session=session)
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
     text: str = t("admin_wizard_category", locale=locale)
@@ -547,12 +543,12 @@ async def handle_wizard_video_message(
 )
 async def handle_wizard_skip_pdf(
     callback: CallbackQuery,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     recipe: RecipeDTO = await _save_wizard_recipe(
-        session=session,
+        recipe_service=recipe_service,
         state=state,
     )
     title: str = (
@@ -573,7 +569,7 @@ async def handle_wizard_skip_pdf(
 @admin_router.message(RecipeCreateWizard.pdf)
 async def handle_wizard_pdf_message(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -587,7 +583,7 @@ async def handle_wizard_pdf_message(
             await state.update_data(document_file_id=url)
 
     recipe: RecipeDTO = await _save_wizard_recipe(
-        session=session,
+        recipe_service=recipe_service,
         state=state,
     )
     title: str = (
@@ -627,13 +623,14 @@ async def handle_add_template_callback(
 @admin_router.message(RecipeTemplateImportState.waiting_for_template)
 async def handle_template_message(
     message: Message,
-    session: AsyncSession,
+    category_service: CategoryService,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     raw_template: str = message.text or ""
     parsed: ParsedRecipeTemplateDTO | None = RecipeService.parse_recipe_template(
-        raw_template
+        raw_template,
     )
 
     if parsed is None:
@@ -643,18 +640,15 @@ async def handle_template_message(
         )
         return
 
-    category_service: CategoryService = CategoryService(session=session)
     top_categories: list[
         CategoryDTO
     ] = await category_service.get_top_level_categories()
     fallback_id: int = top_categories[0].id if top_categories else 1
 
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO = await recipe_service.create_from_parsed_template(
         parsed=parsed,
         fallback_category_id=fallback_id,
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -675,7 +669,7 @@ async def handle_template_message(
 async def handle_edit_recipe_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -684,7 +678,6 @@ async def handle_edit_recipe_callback(
         await callback.answer()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
     if recipe is None:
         await callback.answer(
@@ -769,7 +762,7 @@ async def handle_edit_title_ru_callback(
 async def handle_edit_category_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -777,7 +770,6 @@ async def handle_edit_category_callback(
         await state.update_data(recipe_id=callback_data.target_id)
     await state.set_state(RecipeEditWizard.category_id)
 
-    category_service: CategoryService = CategoryService(session=session)
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
     text: str = t("admin_edit_prompt_category", locale=locale)
@@ -918,7 +910,7 @@ async def handle_edit_media_callback(
 @admin_router.message(RecipeEditWizard.title_en)
 async def handle_edit_title_en_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -932,12 +924,10 @@ async def handle_edit_title_en_input(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(title_en=title_en),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -960,7 +950,7 @@ async def handle_edit_title_en_input(
 @admin_router.message(RecipeEditWizard.title_ru)
 async def handle_edit_title_ru_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -974,12 +964,10 @@ async def handle_edit_title_ru_input(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(title_ru=title_ru),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1006,7 +994,7 @@ async def handle_edit_title_ru_input(
 async def handle_edit_category_select(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1018,12 +1006,10 @@ async def handle_edit_category_select(
         await callback.answer()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(category_id=category_id),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1049,7 +1035,7 @@ async def handle_edit_category_select(
 @admin_router.message(RecipeEditWizard.prep_time)
 async def handle_edit_prep_time_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1071,12 +1057,10 @@ async def handle_edit_prep_time_input(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(prep_time_minutes=prep_time),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1099,7 +1083,7 @@ async def handle_edit_prep_time_input(
 @admin_router.message(RecipeEditWizard.ingredients)
 async def handle_edit_ingredients_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1127,12 +1111,10 @@ async def handle_edit_ingredients_input(
                 ),
             )
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(ingredients=ingredients),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1155,7 +1137,7 @@ async def handle_edit_ingredients_input(
 @admin_router.message(RecipeEditWizard.instructions_en)
 async def handle_edit_instructions_en_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1169,12 +1151,10 @@ async def handle_edit_instructions_en_input(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(instructions_en=instructions_en),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1197,7 +1177,7 @@ async def handle_edit_instructions_en_input(
 @admin_router.message(RecipeEditWizard.instructions_ru)
 async def handle_edit_instructions_ru_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1211,12 +1191,10 @@ async def handle_edit_instructions_ru_input(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(instructions_ru=instructions_ru),
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1239,7 +1217,7 @@ async def handle_edit_instructions_ru_input(
 @admin_router.message(RecipeEditWizard.media)
 async def handle_edit_media_input(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1276,12 +1254,10 @@ async def handle_edit_media_input(
         else:
             dto = RecipeUpdateDTO(photo_file_id=raw_text)
 
-    recipe_service: RecipeService = RecipeService(session=session)
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=dto,
     )
-    await session.commit()
     await state.clear()
 
     title: str = (
@@ -1307,7 +1283,7 @@ async def handle_edit_media_input(
 async def handle_delete_recipe_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     recipe_id: int | None = callback_data.target_id
@@ -1315,7 +1291,6 @@ async def handle_delete_recipe_callback(
         await callback.answer()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
     if recipe is None:
         await callback.answer(
@@ -1348,14 +1323,12 @@ async def handle_delete_recipe_callback(
 async def handle_delete_confirm_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     recipe_id: int | None = callback_data.target_id
     if recipe_id is not None:
-        recipe_service: RecipeService = RecipeService(session=session)
         await recipe_service.delete_recipe(recipe_id)
-        await session.commit()
 
     text: str = t("admin_recipe_deleted", locale=locale)
     keyboard = get_admin_dashboard_keyboard(locale=locale)
@@ -1391,14 +1364,13 @@ async def handle_delete_cancel_callback(
 @admin_router.message(Command("manage_categories"))
 async def handle_manage_categories_command(
     message: Message,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
 ) -> None:
     if state is not None:
         await state.clear()
 
-    category_service: CategoryService = CategoryService(session=session)
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
     text: str = "📁 " + (
@@ -1420,14 +1392,13 @@ async def handle_manage_categories_command(
 )
 async def handle_manage_categories_callback(
     callback: CallbackQuery,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
 ) -> None:
     if state is not None:
         await state.clear()
 
-    category_service: CategoryService = CategoryService(session=session)
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
     text: str = "📁 " + (
@@ -1453,7 +1424,7 @@ async def handle_manage_categories_callback(
 async def handle_category_detail_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     category_id: int | None = callback_data.target_id
@@ -1461,7 +1432,6 @@ async def handle_category_detail_callback(
         await callback.answer()
         return
 
-    category_service: CategoryService = CategoryService(session=session)
     category: CategoryDTO | None = await category_service.get_category_by_id(
         category_id,
     )
@@ -1491,16 +1461,13 @@ async def handle_category_detail_callback(
 async def handle_delete_category_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     category_id: int | None = callback_data.target_id
     if category_id is not None:
-        category_service: CategoryService = CategoryService(session=session)
         await category_service.delete_category(category_id)
-        await session.commit()
 
-    category_service = CategoryService(session=session)
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
     text: str = f"{t('admin_category_deleted', locale=locale)}\n\n📁 " + (
@@ -1566,7 +1533,7 @@ async def handle_category_name_en(
 @admin_router.message(CategoryCreateWizard.name_ru)
 async def handle_category_name_ru(
     message: Message,
-    session: AsyncSession,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1577,7 +1544,6 @@ async def handle_category_name_ru(
     await state.update_data(name_ru=name_ru)
     await state.set_state(CategoryCreateWizard.parent_id)
 
-    category_service: CategoryService = CategoryService(session=session)
     top_categories: list[
         CategoryDTO
     ] = await category_service.get_top_level_categories()
@@ -1602,7 +1568,7 @@ async def handle_category_name_ru(
 async def handle_category_parent_select(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -1619,7 +1585,6 @@ async def handle_category_parent_select(
     if not slug:
         slug = f"cat_{int(datetime.now(UTC).timestamp())}"
 
-    category_service: CategoryService = CategoryService(session=session)
     dto = CategoryCreateDTO(
         slug=slug,
         name_en=name_en,
@@ -1627,7 +1592,6 @@ async def handle_category_parent_select(
         parent_id=parent_id,
     )
     new_cat: CategoryDTO = await category_service.create_category(dto)
-    await session.commit()
     await state.clear()
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()

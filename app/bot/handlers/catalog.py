@@ -3,7 +3,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import (
     CatalogNavCallback,
@@ -125,14 +124,13 @@ def _format_recipe_card(
 @catalog_router.message(Command("catalog"))
 async def handle_catalog_command(
     message: Message,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
 ) -> None:
     if state is not None:
         await state.clear()
 
-    category_service: CategoryService = CategoryService(session=session)
     top_categories: list[
         CategoryDTO
     ] = await category_service.get_top_level_categories()
@@ -154,10 +152,9 @@ async def handle_catalog_command(
 )
 async def handle_top_categories_callback(
     callback: CallbackQuery,
-    session: AsyncSession,
+    category_service: CategoryService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_service: CategoryService = CategoryService(session=session)
     top_categories: list[
         CategoryDTO
     ] = await category_service.get_top_level_categories()
@@ -183,22 +180,21 @@ async def handle_top_categories_callback(
 async def handle_category_nav_callback(
     callback: CallbackQuery,
     callback_data: CatalogNavCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
+    recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     category_id: int = int(callback_data.category_id or 1)
-    category_service: CategoryService = CategoryService(session=session)
-    recipe_service: RecipeService = RecipeService(session=session)
 
     parent_category: CategoryDTO | None = await category_service.get_category_by_id(
-        category_id
+        category_id,
     )
     if parent_category is None:
         await callback.answer(t("category_empty", locale=locale))
         return
 
     subcategories: list[CategoryDTO] = await category_service.get_subcategories(
-        category_id
+        category_id,
     )
     if subcategories and callback_data.parent_id is None:
         text: str = t("subcategory_select", locale=locale)
@@ -284,12 +280,11 @@ async def handle_category_nav_callback(
 async def handle_sort_toggle_callback(
     callback: CallbackQuery,
     callback_data: SortToggleCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
+    recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     category_id: int = callback_data.category_id
-    category_service: CategoryService = CategoryService(session=session)
-    recipe_service: RecipeService = RecipeService(session=session)
 
     category: CategoryDTO | None = await category_service.get_category_by_id(
         category_id,
@@ -339,11 +334,10 @@ async def handle_sort_toggle_callback(
 async def handle_recipe_view_callback(
     callback: CallbackQuery,
     callback_data: RecipeViewCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO | None = await recipe_service.get_recipe(
         callback_data.recipe_id,
     )
@@ -395,10 +389,11 @@ async def handle_recipe_view_callback(
 async def handle_recipe_media_callback(
     callback: CallbackQuery,
     callback_data: RecipeMediaCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
+    pdf_export_service: PdfExportService,
+    media_downloader_service: MediaDownloaderService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO | None = await recipe_service.get_recipe(
         callback_data.recipe_id,
     )
@@ -423,8 +418,7 @@ async def handle_recipe_media_callback(
             await callback.answer()
             return
 
-        pdf_service: PdfExportService = PdfExportService()
-        pdf_res: ExportedPdfResult | None = await pdf_service.recipe_to_pdf(
+        pdf_res: ExportedPdfResult | None = await pdf_export_service.recipe_to_pdf(
             recipe=recipe,
             locale=locale,
         )
@@ -437,7 +431,7 @@ async def handle_recipe_media_callback(
                 document=input_file,
                 caption=t("recipe_pdf_caption", locale=locale, title=title),
             )
-            pdf_service.cleanup(pdf_res.file_path)
+            await pdf_export_service.cleanup(pdf_res.file_path)
             await callback.answer()
             return
 
@@ -451,9 +445,10 @@ async def handle_recipe_media_callback(
             return
 
         if recipe.instagram_url:
-            downloader: MediaDownloaderService = MediaDownloaderService()
-            media_res: DownloadedMediaResult | None = await downloader.download_video(
-                url=recipe.instagram_url
+            media_res: (
+                DownloadedMediaResult | None
+            ) = await media_downloader_service.download_video(
+                url=recipe.instagram_url,
             )
             if media_res is not None:
                 video_file: FSInputFile = FSInputFile(
@@ -468,7 +463,7 @@ async def handle_recipe_media_callback(
                         title=title,
                     ),
                 )
-                downloader.cleanup(media_res.file_path)
+                await media_downloader_service.cleanup(media_res.file_path)
                 await callback.answer()
                 return
 
@@ -479,7 +474,7 @@ async def handle_recipe_media_callback(
 async def handle_favorite_toggle_callback(
     callback: CallbackQuery,
     callback_data: FavoriteToggleCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -487,7 +482,6 @@ async def handle_favorite_toggle_callback(
         await callback.answer()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     recipe: RecipeDTO | None = await recipe_service.get_recipe(
         callback_data.recipe_id,
     )
@@ -503,7 +497,6 @@ async def handle_favorite_toggle_callback(
         user_id=user.id,
         recipe_id=recipe.id,
     )
-    await session.commit()
 
     alert_msg: str = (
         t("favorite_added", locale=locale)

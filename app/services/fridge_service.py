@@ -20,6 +20,8 @@ class FridgeService:
         else:
             raise ValueError("Either fridge_repo or session must be provided")
 
+        self.session: AsyncSession = self.fridge_repo.session
+
     @staticmethod
     def normalize_ingredient(name: str) -> str:
         lowered: str = name.lower().strip()
@@ -69,6 +71,7 @@ class FridgeService:
             user_id=user_id,
             items=parsed_items,
         )
+        await self.session.commit()
 
         return [FridgeItemDTO.model_validate(item) for item in created_items]
 
@@ -82,19 +85,30 @@ class FridgeService:
             user_id=user_id,
             items=parsed_items,
         )
+        await self.session.commit()
 
         return [FridgeItemDTO.model_validate(item) for item in created_items]
 
     async def clear_fridge(self, user_id: int) -> int:
-        return await self.fridge_repo.clear_items(user_id)
+        count: int = await self.fridge_repo.clear_items(user_id)
+        await self.session.commit()
+
+        return count
 
     async def delete_item(self, user_id: int, item_id: int) -> bool:
-        return await self.fridge_repo.delete_item(user_id, item_id)
+        result: bool = await self.fridge_repo.delete_item(user_id, item_id)
+        if result:
+            await self.session.commit()
+
+        return result
 
     async def delete_item_by_name(self, user_id: int, raw_name: str) -> bool:
         normalized_name: str = self.normalize_ingredient(raw_name)
-
-        return await self.fridge_repo.delete_item_by_name(
+        result: bool = await self.fridge_repo.delete_item_by_name(
             user_id,
             normalized_name,
         )
+        if result:
+            await self.session.commit()
+
+        return result

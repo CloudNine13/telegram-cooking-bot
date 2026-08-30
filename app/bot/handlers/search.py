@@ -3,7 +3,6 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import (
     CategorySearchCallback,
@@ -143,11 +142,10 @@ async def handle_search_mode_instant(
 async def handle_category_search_callback(
     callback: CallbackQuery,
     callback_data: CategorySearchCallback,
-    session: AsyncSession,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_service: CategoryService = CategoryService(session=session)
     category: CategoryDTO | None = await category_service.get_category_by_id(
         callback_data.category_id,
     )
@@ -180,7 +178,7 @@ async def handle_category_search_callback(
 @search_router.message(CategorySearchState.waiting_for_query)
 async def handle_category_search_query(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -192,7 +190,6 @@ async def handle_category_search_query(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     paginated: PaginatedResponse[RecipeDTO] = await recipe_service.search_in_category(
         category_id=category_id,
         query_text=query_text,
@@ -234,7 +231,7 @@ async def handle_category_search_query(
 @search_router.message(GlobalSearchState.waiting_for_query)
 async def handle_global_search_query(
     message: Message,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -243,7 +240,6 @@ async def handle_global_search_query(
         await state.clear()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     paginated: PaginatedResponse[RecipeDTO] = await recipe_service.search_global(
         query_text=query_text,
         pagination=PaginationParams(page=1, page_size=5),
@@ -283,7 +279,7 @@ async def handle_global_search_query(
 @search_router.message(GlobalSearchState.waiting_for_ingredients)
 async def handle_instant_ingredient_search(
     message: Message,
-    session: AsyncSession,
+    fridge_matcher_service: FridgeMatcherService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -293,10 +289,9 @@ async def handle_instant_ingredient_search(
         return
 
     await state.clear()
-    matcher_service: FridgeMatcherService = FridgeMatcherService(
-        session=session,
-    )
-    matches: list[RecipeMatchResultDTO] = await matcher_service.search_by_ingredients(
+    matches: list[
+        RecipeMatchResultDTO
+    ] = await fridge_matcher_service.search_by_ingredients(
         raw_ingredients_text=raw_ingredients,
         max_missing=2,
         locale=locale,
@@ -330,7 +325,7 @@ async def handle_instant_ingredient_search(
 async def handle_search_pagination(
     callback: CallbackQuery,
     callback_data: PaginationCallback,
-    session: AsyncSession,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
@@ -343,7 +338,6 @@ async def handle_search_pagination(
         await callback.answer()
         return
 
-    recipe_service: RecipeService = RecipeService(session=session)
     paginated: PaginatedResponse[RecipeDTO]
 
     if search_type == "category" and category_id is not None:

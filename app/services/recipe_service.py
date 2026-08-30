@@ -47,6 +47,8 @@ class RecipeService:
         else:
             self.favorite_repo = FavoriteRepo(self.recipe_repo.session)
 
+        self.session: AsyncSession = self.recipe_repo.session
+
     async def get_recipe(self, recipe_id: int) -> RecipeDTO | None:
         recipe: Recipe | None = await self.recipe_repo.get_by_id(recipe_id)
         if recipe is None:
@@ -130,6 +132,7 @@ class RecipeService:
 
     async def create_recipe(self, dto: RecipeCreateDTO) -> RecipeDTO:
         recipe: Recipe = await self.recipe_repo.create(dto)
+        await self.session.commit()
 
         return RecipeDTO.model_validate(recipe)
 
@@ -179,13 +182,22 @@ class RecipeService:
         if recipe is None:
             return None
 
+        await self.session.commit()
+
         return RecipeDTO.model_validate(recipe)
 
     async def delete_recipe(self, recipe_id: int) -> bool:
-        return await self.recipe_repo.delete(recipe_id)
+        result: bool = await self.recipe_repo.delete(recipe_id)
+        if result:
+            await self.session.commit()
+
+        return result
 
     async def toggle_favorite(self, user_id: int, recipe_id: int) -> bool:
-        return await self.favorite_repo.toggle(user_id, recipe_id)
+        result: bool = await self.favorite_repo.toggle(user_id, recipe_id)
+        await self.session.commit()
+
+        return result
 
     async def is_favorite(self, user_id: int, recipe_id: int) -> bool:
         return await self.favorite_repo.is_favorite(user_id, recipe_id)
