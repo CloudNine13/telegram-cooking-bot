@@ -111,7 +111,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "fridge_cleared": "🗑️ Your fridge inventory has been cleared.",
         "btn_fridge_add": "➕ Add Items",
         "btn_fridge_replace": "🔄 Replace All",
+        "btn_fridge_remove_items": "🗑️ Remove Items",
         "btn_fridge_clear": "🗑️ Clear Fridge",
+        "fridge_remove_menu_title": "Select an item to remove from the shared fridge:",
+        "fridge_item_removed": "Removed {item} from fridge.",
         "btn_fridge_match_full": "🍳 Ready to Cook (100% Match)",
         "btn_fridge_match_partial": "🤏 Almost Ready (Missing 1-2)",
         "fridge_match_full_title": "🍳 Ready to Cook (100% Match):",
@@ -129,6 +132,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_admin_manage_categories": "📁 Manage Categories",
         "btn_admin_edit_recipe": "✏️ Edit Recipe",
         "btn_admin_delete_recipe": "🗑️ Delete Recipe",
+        "btn_edit_recipe": "✏️ Edit Recipe",
+        "btn_delete_recipe": "🗑️ Delete Recipe",
+        "btn_confirm_delete": "🗑️ Confirm Delete",
         "admin_recipe_deleted": "✅ Recipe deleted successfully.",
         "admin_recipe_delete_confirm": "⚠️ Are you sure you want to delete <b>{title}</b>?",
         "admin_recipe_created": "✅ Recipe <b>{title}</b> created successfully!",
@@ -154,6 +160,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_prompt_instructions_en": "👩‍🍳 Enter new English cooking instructions:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Enter new Russian cooking instructions:",
         "admin_edit_prompt_media": (
+            "📸 Send new photo, video, PDF document, URL, or /clear to remove media:"
+        ),
+        "admin_edit_title_en_prompt": "📝 Enter new English title:",
+        "admin_edit_title_ru_prompt": "📝 Enter new Russian title:",
+        "admin_edit_category_prompt": "📂 Select new category:",
+        "admin_edit_prep_time_prompt": "⏱️ Enter new prep time in minutes (number only):",
+        "admin_edit_ingredients_prompt": (
+            "🛒 Enter new ingredients (one per line, format: <code>Name - Quantity Unit</code>):"
+        ),
+        "admin_edit_instructions_prompt": "👩‍🍳 Enter new cooking instructions:",
+        "admin_edit_media_prompt": (
             "📸 Send new photo, video, PDF document, URL, or /clear to remove media:"
         ),
         "admin_wizard_title_en": "📝 Step 1/7: Enter recipe title in English:",
@@ -293,7 +310,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "fridge_cleared": "🗑️ Холодильник полностью очищен.",
         "btn_fridge_add": "➕ Добавить продукты",
         "btn_fridge_replace": "🔄 Заменить все",
+        "btn_fridge_remove_items": "🗑️ Удалить продукты",
         "btn_fridge_clear": "🗑️ Очистить холодильник",
+        "fridge_remove_menu_title": "Выберите продукт для удаления из холодильника:",
+        "fridge_item_removed": "Продукт {item} удален из холодильника.",
         "btn_fridge_match_full": "🍳 Можно готовить (100% совпадение)",
         "btn_fridge_match_partial": "🤏 Почти готово (не хватает 1-2)",
         "fridge_match_full_title": "🍳 Можно готовить прямо сейчас (100% совпадение):",
@@ -311,6 +331,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_admin_manage_categories": "📁 Управление категориями",
         "btn_admin_edit_recipe": "✏️ Редактировать рецепт",
         "btn_admin_delete_recipe": "🗑️ Удалить рецепт",
+        "btn_edit_recipe": "✏️ Редактировать рецепт",
+        "btn_delete_recipe": "🗑️ Удалить рецепт",
+        "btn_confirm_delete": "🗑️ Подтвердить удаление",
         "admin_recipe_deleted": "✅ Рецепт успешно удален.",
         "admin_recipe_delete_confirm": "⚠️ Вы уверены, что хотите удалить <b>{title}</b>?",
         "admin_recipe_created": "✅ Рецепт <b>{title}</b> успешно создан!",
@@ -336,6 +359,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_prompt_instructions_en": "👩‍🍳 Введите новые шаги приготовления на английском:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Введите новые шаги приготовления на русском:",
         "admin_edit_prompt_media": (
+            "📸 Отправьте новое фото, видео, PDF документ, ссылку или /clear для удаления медиа:"
+        ),
+        "admin_edit_title_en_prompt": "📝 Введите новое название на английском:",
+        "admin_edit_title_ru_prompt": "📝 Введите новое название на русском:",
+        "admin_edit_category_prompt": "📂 Выберите новую категорию:",
+        "admin_edit_prep_time_prompt": "⏱️ Введите новое время приготовления в минутах (только число):",
+        "admin_edit_ingredients_prompt": (
+            "🛒 Введите новые ингредиенты (по одному на строку, формат: <code>Название - Количество Ед</code>):"
+        ),
+        "admin_edit_instructions_prompt": "👩‍🍳 Введите новые шаги приготовления:",
+        "admin_edit_media_prompt": (
             "📸 Отправьте новое фото, видео, PDF документ, ссылку или /clear для удаления медиа:"
         ),
         "admin_wizard_title_en": "📝 Шаг 1/7: Введите название рецепта на английском:",
@@ -475,7 +509,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "fridge_cleared": "🗑️ El inventario de tu nevera ha sido vaciado.",
         "btn_fridge_add": "➕ Añadir Productos",
         "btn_fridge_replace": "🔄 Reemplazar Todo",
+        "btn_fridge_remove_items": "🗑️ Eliminar productos",
         "btn_fridge_clear": "🗑️ Vaciar Nevera",
+        "fridge_remove_menu_title": "Selecciona un ingrediente para eliminar:",
+        "fridge_item_removed": "Ingrediente {item} eliminado del refrigerador.",
         "btn_fridge_match_full": "🍳 Listo para Cocinar (100% Coincidencia)",
         "btn_fridge_match_partial": "🤏 Casi Listo (Faltan 1-2)",
         "fridge_match_full_title": "🍳 Listo para Cocinar (100% Coincidencia):",
@@ -493,6 +530,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_admin_manage_categories": "📁 Gestionar Categorías",
         "btn_admin_edit_recipe": "✏️ Editar Receta",
         "btn_admin_delete_recipe": "🗑️ Eliminar Receta",
+        "btn_edit_recipe": "✏️ Editar Receta",
+        "btn_delete_recipe": "🗑️ Eliminar Receta",
+        "btn_confirm_delete": "🗑️ Confirmar Eliminación",
         "admin_recipe_deleted": "✅ Receta eliminada con éxito.",
         "admin_recipe_delete_confirm": "⚠️ ¿Estás seguro de que deseas eliminar <b>{title}</b>?",
         "admin_recipe_created": "✅ ¡Receta <b>{title}</b> creada con éxito!",
@@ -518,6 +558,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_prompt_instructions_en": "👩‍🍳 Introduce las nuevas instrucciones de cocina en inglés:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Introduce las nuevas instrucciones de cocina en ruso:",
         "admin_edit_prompt_media": (
+            "📸 Envía nueva foto, video, documento PDF, enlace o /clear para eliminar multimedia:"
+        ),
+        "admin_edit_title_en_prompt": "📝 Introduce el nuevo título en inglés:",
+        "admin_edit_title_ru_prompt": "📝 Introduce el nuevo título en ruso:",
+        "admin_edit_category_prompt": "📂 Selecciona nueva categoría:",
+        "admin_edit_prep_time_prompt": "⏱️ Introduce el nuevo tiempo de preparación en minutos (solo número):",
+        "admin_edit_ingredients_prompt": (
+            "🛒 Introduce nuevos ingredientes (uno por línea, formato: <code>Nombre - Cantidad Unidad</code>):"
+        ),
+        "admin_edit_instructions_prompt": "👩‍🍳 Introduce las nuevas instrucciones de cocina:",
+        "admin_edit_media_prompt": (
             "📸 Envía nueva foto, video, documento PDF, enlace o /clear para eliminar multimedia:"
         ),
         "admin_wizard_title_en": "📝 Paso 1/7: Introduce el título de la receta en inglés:",
