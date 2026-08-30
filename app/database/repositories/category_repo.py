@@ -11,7 +11,11 @@ class CategoryRepo(BaseRepo):
         stmt = (
             select(Category)
             .where(Category.id == category_id)
-            .options(selectinload(Category.subcategories))
+            .options(
+                selectinload(Category.subcategories).selectinload(
+                    Category.subcategories,
+                ),
+            )
         )
         result = await self.session.scalars(stmt)
 
@@ -21,7 +25,11 @@ class CategoryRepo(BaseRepo):
         stmt = (
             select(Category)
             .where(Category.slug == slug)
-            .options(selectinload(Category.subcategories))
+            .options(
+                selectinload(Category.subcategories).selectinload(
+                    Category.subcategories,
+                ),
+            )
         )
         result = await self.session.scalars(stmt)
 
@@ -31,7 +39,11 @@ class CategoryRepo(BaseRepo):
         stmt = (
             select(Category)
             .where(Category.parent_id.is_(None))
-            .options(selectinload(Category.subcategories))
+            .options(
+                selectinload(Category.subcategories).selectinload(
+                    Category.subcategories,
+                ),
+            )
             .order_by(Category.order_index.asc(), Category.id.asc())
         )
         result = await self.session.scalars(stmt)
@@ -42,6 +54,7 @@ class CategoryRepo(BaseRepo):
         stmt = (
             select(Category)
             .where(Category.parent_id == parent_id)
+            .options(selectinload(Category.subcategories))
             .order_by(Category.order_index.asc(), Category.id.asc())
         )
         result = await self.session.scalars(stmt)
@@ -52,7 +65,11 @@ class CategoryRepo(BaseRepo):
         stmt = (
             select(Category)
             .where(Category.parent_id.is_(None))
-            .options(selectinload(Category.subcategories))
+            .options(
+                selectinload(Category.subcategories).selectinload(
+                    Category.subcategories,
+                ),
+            )
             .order_by(Category.order_index.asc(), Category.id.asc())
         )
         result = await self.session.scalars(stmt)
@@ -62,7 +79,11 @@ class CategoryRepo(BaseRepo):
     async def get_all(self) -> list[Category]:
         stmt = (
             select(Category)
-            .options(selectinload(Category.subcategories))
+            .options(
+                selectinload(Category.subcategories).selectinload(
+                    Category.subcategories,
+                ),
+            )
             .order_by(Category.order_index.asc(), Category.id.asc())
         )
         result = await self.session.scalars(stmt)
@@ -72,8 +93,7 @@ class CategoryRepo(BaseRepo):
     async def create(self, dto: CategoryCreateDTO) -> Category:
         category = Category(
             parent_id=dto.parent_id,
-            name_en=dto.name_en,
-            name_ru=dto.name_ru,
+            name=dto.name,
             slug=dto.slug,
             order_index=dto.order_index,
         )

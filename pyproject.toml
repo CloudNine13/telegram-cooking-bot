@@ -13,6 +13,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "alembic>=1.19.1",
     "redis>=5.0",
+    "deep-translator>=1.11.4",
 ]
 
 [dependency-groups]

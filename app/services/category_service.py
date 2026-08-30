@@ -9,73 +9,104 @@ from app.schemas.category import (
     CategoryDTO,
     CategoryUpdateDTO,
 )
+from app.services.translation_service import TranslationService
 
 DEFAULT_CATEGORY_TAXONOMY: list[dict[str, Any]] = [
     {
         "slug": "breakfast",
-        "name_en": "Breakfast",
-        "name_ru": "Завтрак",
+        "name": {
+            "en": "Breakfast",
+            "ru": "Завтрак",
+            "es": "Desayuno",
+        },
         "order_index": 1,
         "subcategories": [],
     },
     {
         "slug": "soups",
-        "name_en": "First Courses / Soups",
-        "name_ru": "Первые блюда",
+        "name": {
+            "en": "First Courses / Soups",
+            "ru": "Первые блюда",
+            "es": "Primeros Platos / Sopas",
+        },
         "order_index": 2,
         "subcategories": [],
     },
     {
         "slug": "main_dishes",
-        "name_en": "Main Dishes",
-        "name_ru": "Вторые блюда",
+        "name": {
+            "en": "Main Dishes",
+            "ru": "Вторые блюда",
+            "es": "Platos Principales",
+        },
         "order_index": 3,
         "subcategories": [
             {
                 "slug": "main_dishes_meat",
-                "name_en": "Meat",
-                "name_ru": "Мясо",
+                "name": {
+                    "en": "Meat",
+                    "ru": "Мясо",
+                    "es": "Carne",
+                },
                 "order_index": 1,
             },
             {
                 "slug": "main_dishes_fish",
-                "name_en": "Fish",
-                "name_ru": "Рыба",
+                "name": {
+                    "en": "Fish",
+                    "ru": "Рыба",
+                    "es": "Pescado",
+                },
                 "order_index": 2,
             },
             {
                 "slug": "main_dishes_veg",
-                "name_en": "Vegetables",
-                "name_ru": "Овощи",
+                "name": {
+                    "en": "Vegetables",
+                    "ru": "Овощи",
+                    "es": "Verduras",
+                },
                 "order_index": 3,
             },
         ],
     },
     {
         "slug": "salads",
-        "name_en": "Salads",
-        "name_ru": "Салаты",
+        "name": {
+            "en": "Salads",
+            "ru": "Салаты",
+            "es": "Ensaladas",
+        },
         "order_index": 4,
         "subcategories": [],
     },
     {
         "slug": "appetizers",
-        "name_en": "Appetizers",
-        "name_ru": "Закуски",
+        "name": {
+            "en": "Appetizers",
+            "ru": "Закуски",
+            "es": "Aperitivos",
+        },
         "order_index": 5,
         "subcategories": [],
     },
     {
         "slug": "desserts",
-        "name_en": "Desserts",
-        "name_ru": "Десерты",
+        "name": {
+            "en": "Desserts",
+            "ru": "Десерты",
+            "es": "Postres",
+        },
         "order_index": 6,
         "subcategories": [],
     },
     {
         "slug": "beverages",
-        "name_en": "Beverages",
-        "name_ru": "Напитки",
+        "name": {
+            "en": "Beverages",
+            "ru": "Напитки",
+            "es": "Bebidas",
+        },
         "order_index": 7,
         "subcategories": [],
     },
@@ -87,6 +118,7 @@ class CategoryService:
         self,
         category_repo: CategoryRepo | None = None,
         session: AsyncSession | None = None,
+        translation_service: TranslationService | None = None,
     ) -> None:
         if category_repo is not None:
             self.category_repo: CategoryRepo = category_repo
@@ -97,6 +129,11 @@ class CategoryService:
                 "Either category_repo or session must be provided",
             )
         self.session: AsyncSession = self.category_repo.session
+        self.translation_service: TranslationService = (
+            translation_service
+            if translation_service is not None
+            else TranslationService()
+        )
 
     async def get_top_level_categories(self) -> list[CategoryDTO]:
         categories: list[Category] = await self.category_repo.get_top_level_categories()
@@ -111,7 +148,9 @@ class CategoryService:
         return [CategoryDTO.model_validate(c) for c in subcategories]
 
     async def get_category_by_id(self, category_id: int) -> CategoryDTO | None:
-        category: Category | None = await self.category_repo.get_by_id(category_id)
+        category: Category | None = await self.category_repo.get_by_id(
+            category_id,
+        )
         if category is None:
             return None
 
@@ -135,6 +174,25 @@ class CategoryService:
         return [CategoryDTO.model_validate(c) for c in categories]
 
     async def create_category(self, dto: CategoryCreateDTO) -> CategoryDTO:
+        target_locales: list[str] = ["en", "ru", "es"]
+        missing_locales: list[str] = [
+            loc for loc in target_locales if not dto.name.get(loc)
+        ]
+
+        if missing_locales:
+            source_text: str = ""
+            for val in dto.name.values():
+                if val:
+                    source_text = val
+                    break
+
+            if source_text:
+                translations = await self.translation_service.translate_category_name(
+                    source_text,
+                )
+                for loc in missing_locales:
+                    dto.name[loc] = translations.get(loc, source_text)
+
         category: Category = await self.category_repo.create(dto)
         await self.session.commit()
 
@@ -171,8 +229,7 @@ class CategoryService:
             if parent is None:
                 parent_dto = CategoryCreateDTO(
                     slug=cat_data["slug"],
-                    name_en=cat_data["name_en"],
-                    name_ru=cat_data["name_ru"],
+                    name=cat_data["name"],
                     order_index=cat_data["order_index"],
                     parent_id=None,
                 )
@@ -185,8 +242,7 @@ class CategoryService:
                 if sub is None:
                     sub_dto = CategoryCreateDTO(
                         slug=sub_data["slug"],
-                        name_en=sub_data["name_en"],
-                        name_ru=sub_data["name_ru"],
+                        name=sub_data["name"],
                         order_index=sub_data["order_index"],
                         parent_id=parent.id,
                     )
