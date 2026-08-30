@@ -80,6 +80,12 @@ def get_language_keyboard(
     )
     builder.row(
         InlineKeyboardButton(
+            text="🇪🇸 Español",
+            callback_data=LanguageSelectCallback(language_code="es").pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
             text=t("btn_back", locale=locale),
             callback_data=MainMenuCallback(target="main").pack(),
         ),
