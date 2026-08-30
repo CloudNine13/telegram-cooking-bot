@@ -149,7 +149,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_edit_instructions_en": "👩‍🍳 Instructions (EN)",
         "btn_edit_instructions_ru": "👩‍🍳 Instructions (RU)",
         "btn_edit_media": "📸 Media & Links",
-        "admin_edit_prompt_title_en": "📝 Enter new English title:",
+        "admin_edit_prompt_title_en": "📝 Enter new Spanish title:",
         "admin_edit_prompt_title_ru": "📝 Enter new Russian title:",
         "admin_edit_prompt_category": "📂 Select new category:",
         "admin_edit_prompt_prep_time": "⏱️ Enter new prep time in minutes (number only):",
@@ -157,12 +157,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "🛒 Enter new ingredients (one per line, format: <code>Name - Quantity Unit</code>):"
         ),
         "admin_edit_prompt_instructions": "👩‍🍳 Enter new cooking instructions:",
-        "admin_edit_prompt_instructions_en": "👩‍🍳 Enter new English cooking instructions:",
+        "admin_edit_prompt_instructions_en": "👩‍🍳 Enter new Spanish cooking instructions:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Enter new Russian cooking instructions:",
         "admin_edit_prompt_media": (
             "📸 Send new photo, video, PDF document, URL, or /clear to remove media:"
         ),
-        "admin_edit_title_en_prompt": "📝 Enter new English title:",
+        "admin_edit_title_en_prompt": "📝 Enter new Spanish title:",
         "admin_edit_title_ru_prompt": "📝 Enter new Russian title:",
         "admin_edit_category_prompt": "📂 Select new category:",
         "admin_edit_prep_time_prompt": "⏱️ Enter new prep time in minutes (number only):",
@@ -173,7 +173,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_media_prompt": (
             "📸 Send new photo, video, PDF document, URL, or /clear to remove media:"
         ),
-        "admin_wizard_title_en": "📝 Step 1/7: Enter recipe title in English:",
+        "admin_wizard_title_en": "📝 Step 1/7: Enter recipe title in Spanish:",
         "admin_wizard_title_ru": "📝 Step 2/7: Enter recipe title in Russian:",
         "admin_wizard_category": "📂 Step 3/7: Select category for the recipe:",
         "admin_wizard_prep_time": "⏱️ Step 4/7: Enter prep time in minutes (number only):",
@@ -199,7 +199,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_category_created": "✅ Category <b>{name}</b> created successfully.",
         "admin_category_deleted": "✅ Category deleted successfully.",
         "admin_category_prompt_name": "📁 Enter category name:",
-        "admin_category_prompt_name_en": "📁 Enter category name in English:",
+        "admin_category_prompt_name_en": "📁 Enter category name in Spanish:",
         "admin_category_prompt_name_ru": "📁 Enter category name in Russian:",
         "admin_category_prompt_parent": "📂 Select parent category (or None for top-level):",
         "pagination_page": "Page {current} of {total}",
@@ -348,7 +348,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_edit_instructions_en": "👩‍🍳 Инструкция (EN)",
         "btn_edit_instructions_ru": "👩‍🍳 Инструкция (RU)",
         "btn_edit_media": "📸 Медиа и ссылки",
-        "admin_edit_prompt_title_en": "📝 Введите новое название на английском:",
+        "admin_edit_prompt_title_en": "📝 Введите новое название на испанском:",
         "admin_edit_prompt_title_ru": "📝 Введите новое название на русском:",
         "admin_edit_prompt_category": "📂 Выберите новую категорию:",
         "admin_edit_prompt_prep_time": "⏱️ Введите новое время приготовления в минутах (только число):",
@@ -356,12 +356,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "🛒 Введите новые ингредиенты (по одному на строку, формат: <code>Название - Количество Ед</code>):"
         ),
         "admin_edit_prompt_instructions": "👩‍🍳 Введите новые шаги приготовления:",
-        "admin_edit_prompt_instructions_en": "👩‍🍳 Введите новые шаги приготовления на английском:",
+        "admin_edit_prompt_instructions_en": "👩‍🍳 Введите новые шаги приготовления на испанском:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Введите новые шаги приготовления на русском:",
         "admin_edit_prompt_media": (
             "📸 Отправьте новое фото, видео, PDF документ, ссылку или /clear для удаления медиа:"
         ),
-        "admin_edit_title_en_prompt": "📝 Введите новое название на английском:",
+        "admin_edit_title_en_prompt": "📝 Введите новое название на испанском:",
         "admin_edit_title_ru_prompt": "📝 Введите новое название на русском:",
         "admin_edit_category_prompt": "📂 Выберите новую категорию:",
         "admin_edit_prep_time_prompt": "⏱️ Введите новое время приготовления в минутах (только число):",
@@ -372,7 +372,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_media_prompt": (
             "📸 Отправьте новое фото, видео, PDF документ, ссылку или /clear для удаления медиа:"
         ),
-        "admin_wizard_title_en": "📝 Шаг 1/7: Введите название рецепта на английском:",
+        "admin_wizard_title_en": "📝 Шаг 1/7: Введите название рецепта на испанском:",
         "admin_wizard_title_ru": "📝 Шаг 2/7: Введите название рецепта на русском:",
         "admin_wizard_category": "📂 Шаг 3/7: Выберите категорию для рецепта:",
         "admin_wizard_prep_time": "⏱️ Шаг 4/7: Введите время приготовления в минутах (только число):",
@@ -398,7 +398,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_category_created": "✅ Категория <b>{name}</b> успешно создана.",
         "admin_category_deleted": "✅ Категория успешно удалена.",
         "admin_category_prompt_name": "📁 Введите название категории:",
-        "admin_category_prompt_name_en": "📁 Введите название категории на английском:",
+        "admin_category_prompt_name_en": "📁 Введите название категории на испанском:",
         "admin_category_prompt_name_ru": "📁 Введите название категории на русском:",
         "admin_category_prompt_parent": "📂 Выберите родительскую категорию (или Нет для верхнего уровня):",
         "pagination_page": "Страница {current} из {total}",
@@ -547,7 +547,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_edit_instructions_en": "👩‍🍳 Instrucciones (EN)",
         "btn_edit_instructions_ru": "👩‍🍳 Instrucciones (RU)",
         "btn_edit_media": "📸 Multimedia y Enlaces",
-        "admin_edit_prompt_title_en": "📝 Introduce el nuevo título en inglés:",
+        "admin_edit_prompt_title_en": "📝 Introduce el nuevo título en español:",
         "admin_edit_prompt_title_ru": "📝 Introduce el nuevo título en ruso:",
         "admin_edit_prompt_category": "📂 Selecciona nueva categoría:",
         "admin_edit_prompt_prep_time": "⏱️ Introduce el nuevo tiempo de preparación en minutos (solo número):",
@@ -555,12 +555,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "🛒 Introduce nuevos ingredientes (uno por línea, formato: <code>Nombre - Cantidad Unidad</code>):"
         ),
         "admin_edit_prompt_instructions": "👩‍🍳 Introduce las nuevas instrucciones de cocina:",
-        "admin_edit_prompt_instructions_en": "👩‍🍳 Introduce las nuevas instrucciones de cocina en inglés:",
+        "admin_edit_prompt_instructions_en": "👩‍🍳 Introduce las nuevas instrucciones de cocina en español:",
         "admin_edit_prompt_instructions_ru": "👩‍🍳 Introduce las nuevas instrucciones de cocina en ruso:",
         "admin_edit_prompt_media": (
             "📸 Envía nueva foto, video, documento PDF, enlace o /clear para eliminar multimedia:"
         ),
-        "admin_edit_title_en_prompt": "📝 Introduce el nuevo título en inglés:",
+        "admin_edit_title_en_prompt": "📝 Introduce el nuevo título en español",
         "admin_edit_title_ru_prompt": "📝 Introduce el nuevo título en ruso:",
         "admin_edit_category_prompt": "📂 Selecciona nueva categoría:",
         "admin_edit_prep_time_prompt": "⏱️ Introduce el nuevo tiempo de preparación en minutos (solo número):",
@@ -571,7 +571,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_edit_media_prompt": (
             "📸 Envía nueva foto, video, documento PDF, enlace o /clear para eliminar multimedia:"
         ),
-        "admin_wizard_title_en": "📝 Paso 1/7: Introduce el título de la receta en inglés:",
+        "admin_wizard_title_en": "📝 Paso 1/7: Introduce el título de la receta en español:",
         "admin_wizard_title_ru": "📝 Paso 2/7: Introduce el título de la receta en ruso:",
         "admin_wizard_category": "📂 Paso 3/7: Selecciona la categoría para la receta:",
         "admin_wizard_prep_time": "⏱️ Paso 4/7: Introduce el tiempo de preparación en minutos (solo número):",
@@ -597,7 +597,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_category_created": "✅ Categoría <b>{name}</b> creada con éxito.",
         "admin_category_deleted": "✅ Categoría eliminada con éxito.",
         "admin_category_prompt_name": "📁 Introduce el nombre de la categoría:",
-        "admin_category_prompt_name_en": "📁 Introduce el nombre de la categoría en inglés:",
+        "admin_category_prompt_name_en": "📁 Introduce el nombre de la categoría en español:",
         "admin_category_prompt_name_ru": "📁 Introduce el nombre de la categoría en ruso:",
         "admin_category_prompt_parent": "📂 Selecciona la categoría principal (o Ninguna para nivel superior):",
         "pagination_page": "Página {current} de {total}",

@@ -7,3 +7,7 @@ SPEC.md
 .venv
 __pycache__/
 *.pyc
+docs
+.superpowers
+.ruff_cache
+uv.lock

@@ -1202,8 +1202,28 @@ async def handle_delete_confirm_callback(
 )
 async def handle_delete_cancel_callback(
     callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
+    recipe_id: int | None = callback_data.target_id
+    if recipe_id is not None:
+        recipe: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
+        if recipe is not None:
+            title: str = html.escape(get_localized_text(recipe.title, locale))
+            keyboard = get_admin_recipe_actions_keyboard(
+                recipe_id=recipe.id,
+                locale=locale,
+            )
+            if callback.message is not None:
+                await _edit_or_resend_message(
+                    message=callback.message,
+                    text=f"🍽️ <b>{title}</b>",
+                    reply_markup=keyboard,
+                )
+            await callback.answer()
+            return
+
     text: str = t("admin_menu", locale=locale)
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 

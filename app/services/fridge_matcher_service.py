@@ -36,20 +36,99 @@ class FridgeMatcherService:
             self.fridge_repo = FridgeRepo(self.recipe_repo.session)
 
     @staticmethod
+    def _words_match(w1: str, w2: str) -> bool:
+        if w1 == w2:
+            return True
+
+        s1: str = w1.rstrip("s")
+        s2: str = w2.rstrip("s")
+        if s1 == s2 and len(s1) >= 3:
+            return True
+
+        if w1.endswith("es") and w1[:-2] == w2 and len(w2) >= 3:
+            return True
+
+        if w2.endswith("es") and w2[:-2] == w1 and len(w1) >= 3:
+            return True
+
+        min_len: int = min(len(w1), len(w2))
+        prefix_len: int = 0
+        while prefix_len < min_len and w1[prefix_len] == w2[prefix_len]:
+            prefix_len += 1
+
+        if (
+            prefix_len >= 4
+            and abs(len(w1) - len(w2)) <= 3
+            and prefix_len >= min_len - 2
+        ):
+            return True
+
+        return (
+            prefix_len >= 3
+            and len(w1) <= 5
+            and len(w2) <= 5
+            and abs(len(w1) - len(w2)) <= 1
+            and prefix_len >= min_len - 1
+        )
+
+    @classmethod
+    def _match_tokens(
+        cls,
+        ing_words: list[str],
+        item_words: list[str],
+    ) -> bool:
+        if len(item_words) == 1:
+            item_word: str = item_words[0]
+            return any(cls._words_match(item_word, w) for w in ing_words)
+
+        if len(ing_words) == 1:
+            ing_word: str = ing_words[0]
+            return any(cls._words_match(ing_word, w) for w in item_words)
+
+        item_in_ing: bool = all(
+            any(cls._words_match(iw, iw_recipe) for iw_recipe in ing_words)
+            for iw in item_words
+        )
+        if item_in_ing:
+            return True
+
+        ing_in_item: bool = all(
+            any(cls._words_match(iw_recipe, iw) for iw in item_words)
+            for iw_recipe in ing_words
+        )
+
+        return ing_in_item
+
+    @classmethod
     def is_ingredient_matched(
+        cls,
         ingredient: Ingredient,
         fridge_items: set[str],
     ) -> bool:
-        norm: str = (ingredient.normalized_name or "").strip().lower()
+        raw_norm: str = ingredient.normalized_name or ingredient.name or ""
+        norm: str = FridgeService.normalize_ingredient(raw_norm)
+        if not norm:
+            return False
 
         if norm in fridge_items:
             return True
+
+        ing_words: list[str] = norm.split()
+        if not ing_words:
+            return False
 
         for item in fridge_items:
             if not item:
                 continue
 
-            if norm and (item in norm or norm in item):
+            if item == norm:
+                return True
+
+            item_words: list[str] = item.split()
+            if not item_words:
+                continue
+
+            if cls._match_tokens(ing_words, item_words):
                 return True
 
         return False
@@ -80,7 +159,7 @@ class FridgeMatcherService:
             is_full: bool = True
         else:
             percentage = round((matched_count / total_count) * 100.0, 1)
-            is_full = missing_count == 0
+            is_full = missing_count == 0 and matched_count > 0
 
         match_type: Literal["full", "partial"] = "full" if is_full else "partial"
 
@@ -105,7 +184,13 @@ class FridgeMatcherService:
         if not names:
             return []
 
-        fridge_set: set[str] = {item.strip().lower() for item in names if item}
+        fridge_set: set[str] = {
+            FridgeService.normalize_ingredient(item) for item in names if item
+        }
+        fridge_set.discard("")
+        if not fridge_set:
+            return []
+
         all_recipes: list[Recipe] = await self.recipe_repo.get_all_with_ingredients()
 
         results: list[RecipeMatchResultDTO] = []
@@ -120,6 +205,7 @@ class FridgeMatcherService:
                 and res.is_full_match
                 or (
                     match_type == "partial"
+                    and res.matched_count > 0
                     and 1 <= len(res.missing_ingredients) <= max_missing
                 )
             ):
@@ -173,7 +259,7 @@ class FridgeMatcherService:
                 and res.is_full_match
                 or (
                     match_type == "partial"
-                    and res.matched_ingredients
+                    and res.matched_count > 0
                     and len(res.missing_ingredients) <= max_missing
                 )
             ):

@@ -2,6 +2,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.keyboards.callbacks import (
+    AdminActionCallback,
     CatalogNavCallback,
     CategorySearchCallback,
     FavoriteToggleCallback,
@@ -224,6 +225,7 @@ def get_recipe_view_keyboard(
     source: str = "catalog",
     category_id: int | None = None,
     page: int = 1,
+    is_admin: bool = False,
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
@@ -291,6 +293,24 @@ def get_recipe_view_keyboard(
 
     if link_buttons:
         builder.row(*link_buttons)
+
+    if is_admin:
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_edit_recipe", locale=locale),
+                callback_data=AdminActionCallback(
+                    action="edit_recipe",
+                    target_id=recipe.id,
+                ).pack(),
+            ),
+            InlineKeyboardButton(
+                text=t("btn_delete_recipe", locale=locale),
+                callback_data=AdminActionCallback(
+                    action="delete_recipe",
+                    target_id=recipe.id,
+                ).pack(),
+            ),
+        )
 
     back_callback_str: str
 

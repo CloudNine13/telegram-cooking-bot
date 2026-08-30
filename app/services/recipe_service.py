@@ -1,7 +1,13 @@
+import json
+import logging
 import re
+from typing import Any
 
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.database.models.recipe import Recipe
 from app.database.repositories.category_repo import CategoryRepo
 from app.database.repositories.favorite_repo import FavoriteRepo
@@ -15,6 +21,25 @@ from app.schemas.recipe import (
     RecipeUpdateDTO,
 )
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+_shared_redis: Redis | None = None
+
+
+def _get_default_redis() -> Redis | None:
+    global _shared_redis
+    if _shared_redis is None:
+        try:
+            settings = get_settings()
+            _shared_redis = Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+            )
+        except (RedisError, ConnectionError, OSError) as exc:
+            logger.debug("Could not initialize default Redis client: %s", exc)
+            _shared_redis = None
+    return _shared_redis
+
 
 class RecipeService:
     def __init__(
@@ -23,6 +48,7 @@ class RecipeService:
         category_repo: CategoryRepo | None = None,
         favorite_repo: FavoriteRepo | None = None,
         session: AsyncSession | None = None,
+        redis: Redis | None = None,
     ) -> None:
         if recipe_repo is not None:
             self.recipe_repo: RecipeRepo = recipe_repo
@@ -48,6 +74,79 @@ class RecipeService:
             self.favorite_repo = FavoriteRepo(self.recipe_repo.session)
 
         self.session: AsyncSession = self.recipe_repo.session
+        self.redis: Redis | None = redis if redis is not None else _get_default_redis()
+
+    async def _get_search_cache(
+        self,
+        cache_key: str,
+    ) -> tuple[list[RecipeDTO], int] | None:
+        if self.redis is None:
+            return None
+
+        try:
+            raw_val = await self.redis.get(cache_key)
+            if raw_val is None:
+                return None
+
+            raw_str: str = (
+                raw_val.decode("utf-8") if isinstance(raw_val, bytes) else str(raw_val)
+            )
+            parsed: dict[str, Any] = json.loads(raw_str)
+            items: list[RecipeDTO] = [
+                RecipeDTO.model_validate(item) for item in parsed.get("items", [])
+            ]
+            total_count: int = int(parsed.get("total_count", 0))
+
+            return items, total_count
+        except (RedisError, ConnectionError, OSError) as exc:
+            logger.debug("Redis get cache error: %s", exc)
+            return None
+
+    async def _set_search_cache(
+        self,
+        cache_key: str,
+        data: tuple[list[RecipeDTO], int],
+        ttl: int = 600,
+    ) -> None:
+        if self.redis is None:
+            return
+
+        try:
+            recipes, total_count = data
+            payload: dict[str, Any] = {
+                "items": [r.model_dump(mode="json") for r in recipes],
+                "total_count": total_count,
+            }
+            await self.redis.set(cache_key, json.dumps(payload), ex=ttl)
+        except (RedisError, ConnectionError, OSError) as exc:
+            logger.debug("Redis set cache error: %s", exc)
+
+    async def _invalidate_search_cache(self) -> None:
+        if self.redis is None:
+            return
+
+        try:
+            cursor: int = 0
+            keys_to_delete: list[str] = []
+            while True:
+                cursor, keys = await self.redis.scan(
+                    cursor=cursor,
+                    match="recipe_search:*",
+                    count=100,
+                )
+                if keys:
+                    for k in keys:
+                        k_str: str = (
+                            k.decode("utf-8") if isinstance(k, bytes) else str(k)
+                        )
+                        keys_to_delete.append(k_str)
+                if cursor == 0:
+                    break
+
+            if keys_to_delete:
+                await self.redis.delete(*keys_to_delete)
+        except (RedisError, ConnectionError, OSError) as exc:
+            logger.debug("Redis invalidate cache error: %s", exc)
 
     async def get_recipe(self, recipe_id: int) -> RecipeDTO | None:
         recipe: Recipe | None = await self.recipe_repo.get_by_id(recipe_id)
@@ -95,6 +194,22 @@ class RecipeService:
         include_subcategories: bool = True,
     ) -> PaginatedResponse[RecipeDTO]:
         pagination_params = pagination if pagination is not None else PaginationParams()
+        cache_key: str = (
+            f"recipe_search:category:{category_id}:"
+            f"{query_text.strip().lower()}:{sort_order.value}:"
+            f"{pagination_params.page}:{pagination_params.page_size}:"
+            f"{include_subcategories}"
+        )
+        cached = await self._get_search_cache(cache_key)
+        if cached is not None:
+            cached_recipes, cached_total = cached
+            return PaginatedResponse[RecipeDTO](
+                items=cached_recipes,
+                total_count=cached_total,
+                page=pagination_params.page,
+                page_size=pagination_params.page_size,
+            )
+
         recipes, total_count = await self.recipe_repo.search_in_category(
             category_id=category_id,
             query_text=query_text,
@@ -102,9 +217,11 @@ class RecipeService:
             pagination=pagination_params,
             include_subcategories=include_subcategories,
         )
+        dto_items: list[RecipeDTO] = [RecipeDTO.model_validate(r) for r in recipes]
+        await self._set_search_cache(cache_key, (dto_items, total_count))
 
         return PaginatedResponse[RecipeDTO](
-            items=[RecipeDTO.model_validate(r) for r in recipes],
+            items=dto_items,
             total_count=total_count,
             page=pagination_params.page,
             page_size=pagination_params.page_size,
@@ -117,14 +234,31 @@ class RecipeService:
         pagination: PaginationParams | None = None,
     ) -> PaginatedResponse[RecipeDTO]:
         pagination_params = pagination if pagination is not None else PaginationParams()
+        cache_key: str = (
+            f"recipe_search:global:{query_text.strip().lower()}:"
+            f"{sort_order.value}:{pagination_params.page}:"
+            f"{pagination_params.page_size}"
+        )
+        cached = await self._get_search_cache(cache_key)
+        if cached is not None:
+            cached_recipes, cached_total = cached
+            return PaginatedResponse[RecipeDTO](
+                items=cached_recipes,
+                total_count=cached_total,
+                page=pagination_params.page,
+                page_size=pagination_params.page_size,
+            )
+
         recipes, total_count = await self.recipe_repo.search_global(
             query_text=query_text,
             sort_order=sort_order,
             pagination=pagination_params,
         )
+        dto_items: list[RecipeDTO] = [RecipeDTO.model_validate(r) for r in recipes]
+        await self._set_search_cache(cache_key, (dto_items, total_count))
 
         return PaginatedResponse[RecipeDTO](
-            items=[RecipeDTO.model_validate(r) for r in recipes],
+            items=dto_items,
             total_count=total_count,
             page=pagination_params.page,
             page_size=pagination_params.page_size,
@@ -133,6 +267,7 @@ class RecipeService:
     async def create_recipe(self, dto: RecipeCreateDTO) -> RecipeDTO:
         recipe: Recipe = await self.recipe_repo.create(dto)
         await self.session.commit()
+        await self._invalidate_search_cache()
 
         return RecipeDTO.model_validate(recipe)
 
@@ -192,6 +327,7 @@ class RecipeService:
             return None
 
         await self.session.commit()
+        await self._invalidate_search_cache()
 
         return RecipeDTO.model_validate(recipe)
 
@@ -199,6 +335,7 @@ class RecipeService:
         result: bool = await self.recipe_repo.delete(recipe_id)
         if result:
             await self.session.commit()
+            await self._invalidate_search_cache()
 
         return result
 
