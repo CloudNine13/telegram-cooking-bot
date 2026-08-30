@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models.fridge import FridgeItem
 from app.database.repositories.fridge_repo import FridgeRepo
-from app.schemas.fridge import FridgeItemDTO
+from app.schemas.fridge import FridgeItemCreateDTO, FridgeItemDTO
 
 
 class FridgeService:
@@ -31,9 +31,9 @@ class FridgeService:
         return normalized
 
     @classmethod
-    def parse_raw_ingredients(cls, text: str) -> list[tuple[str, str]]:
+    def parse_raw_ingredients(cls, text: str) -> list[FridgeItemCreateDTO]:
         tokens: list[str] = re.split(r"[,;\n]+", text)
-        result: list[tuple[str, str]] = []
+        result: list[FridgeItemCreateDTO] = []
         seen_normalized: set[str] = set()
 
         for token in tokens:
@@ -46,69 +46,46 @@ class FridgeService:
                 continue
 
             seen_normalized.add(norm_name)
-            result.append((raw_name, norm_name))
+            result.append(
+                FridgeItemCreateDTO(
+                    raw_name=raw_name,
+                    normalized_name=norm_name,
+                ),
+            )
 
         return result
 
-    async def get_user_items(self, user_id: int) -> list[FridgeItemDTO]:
-        items: list[FridgeItem] = await self.fridge_repo.get_user_items(user_id)
+    async def get_shared_items(self) -> list[FridgeItemDTO]:
+        items: list[FridgeItem] = await self.fridge_repo.get_all()
 
         return [FridgeItemDTO.model_validate(item) for item in items]
 
-    async def get_user_normalized_names(self, user_id: int) -> list[str]:
-        return await self.fridge_repo.get_user_normalized_names(user_id)
-
-    async def add_ingredients(
-        self,
-        user_id: int,
-        raw_text: str,
-    ) -> list[FridgeItemDTO]:
-        parsed_items = self.parse_raw_ingredients(raw_text)
-        if not parsed_items:
+    async def add_ingredients(self, raw_text: str) -> list[FridgeItemDTO]:
+        dtos: list[FridgeItemCreateDTO] = self.parse_raw_ingredients(raw_text)
+        if not dtos:
             return []
 
-        created_items: list[FridgeItem] = await self.fridge_repo.add_items(
-            user_id=user_id,
-            items=parsed_items,
-        )
+        created: list[FridgeItem] = await self.fridge_repo.bulk_create(dtos)
         await self.session.commit()
 
-        return [FridgeItemDTO.model_validate(item) for item in created_items]
+        return [FridgeItemDTO.model_validate(item) for item in created]
 
-    async def replace_ingredients(
-        self,
-        user_id: int,
-        raw_text: str,
-    ) -> list[FridgeItemDTO]:
-        parsed_items = self.parse_raw_ingredients(raw_text)
-        created_items: list[FridgeItem] = await self.fridge_repo.replace_items(
-            user_id=user_id,
-            items=parsed_items,
-        )
+    async def remove_item(self, item_id: int) -> bool:
+        result: bool = await self.fridge_repo.delete_by_id(item_id)
+        if result:
+            await self.session.commit()
+
+        return result
+
+    async def replace_ingredients(self, raw_text: str) -> list[FridgeItemDTO]:
+        dtos: list[FridgeItemCreateDTO] = self.parse_raw_ingredients(raw_text)
+        created: list[FridgeItem] = await self.fridge_repo.replace_all(dtos)
         await self.session.commit()
 
-        return [FridgeItemDTO.model_validate(item) for item in created_items]
+        return [FridgeItemDTO.model_validate(item) for item in created]
 
-    async def clear_fridge(self, user_id: int) -> int:
-        count: int = await self.fridge_repo.clear_items(user_id)
+    async def clear_fridge(self) -> int:
+        count: int = await self.fridge_repo.delete_all()
         await self.session.commit()
 
         return count
-
-    async def delete_item(self, user_id: int, item_id: int) -> bool:
-        result: bool = await self.fridge_repo.delete_item(user_id, item_id)
-        if result:
-            await self.session.commit()
-
-        return result
-
-    async def delete_item_by_name(self, user_id: int, raw_name: str) -> bool:
-        normalized_name: str = self.normalize_ingredient(raw_name)
-        result: bool = await self.fridge_repo.delete_item_by_name(
-            user_id,
-            normalized_name,
-        )
-        if result:
-            await self.session.commit()
-
-        return result

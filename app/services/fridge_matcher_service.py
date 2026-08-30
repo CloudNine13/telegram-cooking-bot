@@ -1,3 +1,5 @@
+from typing import Literal
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.i18n.helpers import get_localized_text
@@ -5,7 +7,7 @@ from app.database.models.ingredient import Ingredient
 from app.database.models.recipe import Recipe
 from app.database.repositories.fridge_repo import FridgeRepo
 from app.database.repositories.recipe_repo import RecipeRepo
-from app.schemas.fridge import RecipeMatchResultDTO
+from app.schemas.fridge import FridgeItemCreateDTO, RecipeMatchResultDTO
 from app.schemas.recipe import RecipeDTO
 from app.services.fridge_service import FridgeService
 
@@ -70,84 +72,117 @@ class FridgeMatcherService:
                 missing.append(display_name)
 
         total_count: int = len(recipe.ingredients)
+        matched_count: int = len(matched)
+        missing_count: int = len(missing)
+
         if total_count == 0:
             percentage: float = 100.0
             is_full: bool = True
         else:
-            percentage = round((len(matched) / total_count) * 100.0, 1)
-            is_full = len(missing) == 0
+            percentage = round((matched_count / total_count) * 100.0, 1)
+            is_full = missing_count == 0
+
+        match_type: Literal["full", "partial"] = "full" if is_full else "partial"
 
         return RecipeMatchResultDTO(
             recipe=RecipeDTO.model_validate(recipe),
+            match_type=match_type,
+            matched_count=matched_count,
+            missing_count=missing_count,
             match_percentage=percentage,
             matched_ingredients=matched,
             missing_ingredients=missing,
             is_full_match=is_full,
         )
 
-    async def find_full_matches(
+    async def match_shared_fridge(
         self,
-        user_id: int,
-        locale: str = "en",
-    ) -> list[RecipeMatchResultDTO]:
-        user_items: list[str] = await self.fridge_repo.get_user_normalized_names(
-            user_id,
-        )
-        if not user_items:
-            return []
-
-        fridge_set: set[str] = {item.strip().lower() for item in user_items if item}
-        all_recipes: list[Recipe] = await self.recipe_repo.get_all_with_ingredients()
-
-        results: list[RecipeMatchResultDTO] = []
-        for recipe in all_recipes:
-            match_res: RecipeMatchResultDTO = self.match_recipe(
-                recipe=recipe,
-                fridge_ingredients=fridge_set,
-                locale=locale,
-            )
-            if match_res.is_full_match:
-                results.append(match_res)
-
-        results.sort(
-            key=lambda r: (
-                -r.match_percentage,
-                get_localized_text(r.recipe.title, locale=locale),
-            ),
-        )
-
-        return results
-
-    async def find_partial_matches(
-        self,
-        user_id: int,
+        match_type: Literal["full", "partial"],
         max_missing: int = 2,
         locale: str = "en",
     ) -> list[RecipeMatchResultDTO]:
-        user_items: list[str] = await self.fridge_repo.get_user_normalized_names(
-            user_id,
-        )
-        if not user_items:
+        names: list[str] = await self.fridge_repo.get_normalized_names()
+        if not names:
             return []
 
-        fridge_set: set[str] = {item.strip().lower() for item in user_items if item}
+        fridge_set: set[str] = {item.strip().lower() for item in names if item}
         all_recipes: list[Recipe] = await self.recipe_repo.get_all_with_ingredients()
 
         results: list[RecipeMatchResultDTO] = []
         for recipe in all_recipes:
-            match_res: RecipeMatchResultDTO = self.match_recipe(
+            res: RecipeMatchResultDTO = self.match_recipe(
                 recipe=recipe,
                 fridge_ingredients=fridge_set,
                 locale=locale,
             )
-            missing_count: int = len(match_res.missing_ingredients)
-            if 1 <= missing_count <= max_missing:
-                results.append(match_res)
+            if (
+                match_type == "full"
+                and res.is_full_match
+                or (
+                    match_type == "partial"
+                    and 1 <= len(res.missing_ingredients) <= max_missing
+                )
+            ):
+                results.append(res)
+
+        if match_type == "full":
+            results.sort(
+                key=lambda r: (
+                    -r.match_percentage,
+                    get_localized_text(r.recipe.title, locale=locale),
+                ),
+            )
+        else:
+            results.sort(
+                key=lambda r: (
+                    len(r.missing_ingredients),
+                    -r.match_percentage,
+                    get_localized_text(r.recipe.title, locale=locale),
+                ),
+            )
+
+        return results
+
+    async def match_instant_ingredients(
+        self,
+        raw_text: str,
+        match_type: Literal["full", "partial"] = "partial",
+        max_missing: int = 2,
+        locale: str = "en",
+    ) -> list[RecipeMatchResultDTO]:
+        parsed: list[FridgeItemCreateDTO] = FridgeService.parse_raw_ingredients(
+            raw_text,
+        )
+        if not parsed:
+            return []
+
+        fridge_set: set[str] = {
+            item.normalized_name for item in parsed if item.normalized_name
+        }
+        all_recipes: list[Recipe] = await self.recipe_repo.get_all_with_ingredients()
+
+        results: list[RecipeMatchResultDTO] = []
+        for recipe in all_recipes:
+            res: RecipeMatchResultDTO = self.match_recipe(
+                recipe=recipe,
+                fridge_ingredients=fridge_set,
+                locale=locale,
+            )
+            if (
+                match_type == "full"
+                and res.is_full_match
+                or (
+                    match_type == "partial"
+                    and res.matched_ingredients
+                    and len(res.missing_ingredients) <= max_missing
+                )
+            ):
+                results.append(res)
 
         results.sort(
             key=lambda r: (
-                len(r.missing_ingredients),
                 -r.match_percentage,
+                len(r.missing_ingredients),
                 get_localized_text(r.recipe.title, locale=locale),
             ),
         )
@@ -160,32 +195,9 @@ class FridgeMatcherService:
         max_missing: int = 2,
         locale: str = "en",
     ) -> list[RecipeMatchResultDTO]:
-        parsed = FridgeService.parse_raw_ingredients(raw_ingredients_text)
-        if not parsed:
-            return []
-
-        fridge_set: set[str] = {norm for _, norm in parsed if norm}
-        all_recipes: list[Recipe] = await self.recipe_repo.get_all_with_ingredients()
-
-        results: list[RecipeMatchResultDTO] = []
-        for recipe in all_recipes:
-            match_res: RecipeMatchResultDTO = self.match_recipe(
-                recipe=recipe,
-                fridge_ingredients=fridge_set,
-                locale=locale,
-            )
-            if (
-                match_res.matched_ingredients
-                and len(match_res.missing_ingredients) <= max_missing
-            ):
-                results.append(match_res)
-
-        results.sort(
-            key=lambda r: (
-                -r.match_percentage,
-                len(r.missing_ingredients),
-                get_localized_text(r.recipe.title, locale=locale),
-            ),
+        return await self.match_instant_ingredients(
+            raw_text=raw_ingredients_text,
+            match_type="partial",
+            max_missing=max_missing,
+            locale=locale,
         )
-
-        return results
