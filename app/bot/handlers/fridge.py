@@ -6,21 +6,24 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
+from app.bot.filters.admin import IsAdminFilter
 from app.bot.keyboards.callbacks import FridgeActionCallback
 from app.bot.keyboards.fridge import (
     get_fridge_cancel_keyboard,
     get_fridge_main_keyboard,
     get_fridge_match_results_keyboard,
+    get_fridge_remove_items_keyboard,
 )
 from app.bot.states.fridge import FridgeInputState
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
-from app.database.models.user import User
 from app.schemas.fridge import FridgeItemDTO, RecipeMatchResultDTO
 from app.services.fridge_matcher_service import FridgeMatcherService
 from app.services.fridge_service import FridgeService
 
 fridge_router: Router = Router(name="fridge")
+fridge_router.message.filter(IsAdminFilter())
+fridge_router.callback_query.filter(IsAdminFilter())
 
 
 async def _edit_or_resend_message(
@@ -82,16 +85,13 @@ def _render_fridge_view(
 async def handle_fridge_command(
     message: Message,
     fridge_service: FridgeService,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
 ) -> None:
     if state is not None:
         await state.clear()
 
-    user_id: int = user.id if user is not None else 0
-    items: list[FridgeItemDTO] = await fridge_service.get_user_items(user_id)
-
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
     text, keyboard = _render_fridge_view(items=items, locale=locale)
     await message.answer(
         text=text,
@@ -103,16 +103,13 @@ async def handle_fridge_command(
 async def handle_fridge_view_callback(
     callback: CallbackQuery,
     fridge_service: FridgeService,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
     state: FSMContext | None = None,
 ) -> None:
     if state is not None:
         await state.clear()
 
-    user_id: int = user.id if user is not None else 0
-    items: list[FridgeItemDTO] = await fridge_service.get_user_items(user_id)
-
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
     text, keyboard = _render_fridge_view(items=items, locale=locale)
     if callback.message is not None:
         await _edit_or_resend_message(
@@ -163,16 +160,66 @@ async def handle_fridge_replace_callback(
     await callback.answer()
 
 
+@fridge_router.callback_query(
+    FridgeActionCallback.filter(F.action == "delete_menu"),
+)
+async def handle_fridge_delete_menu_callback(
+    callback: CallbackQuery,
+    fridge_service: FridgeService,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
+    if not items:
+        text, keyboard = _render_fridge_view(items=[], locale=locale)
+    else:
+        text = t("fridge_remove_menu_title", locale=locale)
+        keyboard = get_fridge_remove_items_keyboard(items=items, locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@fridge_router.callback_query(
+    FridgeActionCallback.filter(F.action == "delete_item"),
+)
+async def handle_fridge_delete_item_callback(
+    callback: CallbackQuery,
+    callback_data: FridgeActionCallback,
+    fridge_service: FridgeService,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    item_id: int | None = callback_data.item_id
+    if item_id is not None:
+        await fridge_service.remove_item(item_id)
+
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
+    if not items:
+        text, keyboard = _render_fridge_view(items=[], locale=locale)
+    else:
+        text = t("fridge_remove_menu_title", locale=locale)
+        keyboard = get_fridge_remove_items_keyboard(items=items, locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
 @fridge_router.callback_query(FridgeActionCallback.filter(F.action == "clear"))
 async def handle_fridge_clear_callback(
     callback: CallbackQuery,
     fridge_service: FridgeService,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    user_id: int = user.id if user is not None else 0
-    await fridge_service.clear_fridge(user_id)
-
+    await fridge_service.clear_fridge()
     text: str = (
         f"{t('fridge_cleared', locale=locale)}\n\n{t('fridge_empty', locale=locale)}"
     )
@@ -192,14 +239,12 @@ async def handle_fridge_cancel_callback(
     callback: CallbackQuery,
     fridge_service: FridgeService,
     state: FSMContext,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     await state.clear()
-    user_id: int = user.id if user is not None else 0
-    items: list[FridgeItemDTO] = await fridge_service.get_user_items(user_id)
-
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
     text, keyboard = _render_fridge_view(items=items, locale=locale)
+
     if callback.message is not None:
         await _edit_or_resend_message(
             message=callback.message,
@@ -215,14 +260,12 @@ async def handle_fridge_cancel_callback(
 async def handle_fridge_match_full_callback(
     callback: CallbackQuery,
     fridge_matcher_service: FridgeMatcherService,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    user_id: int = user.id if user is not None else 0
     matches: list[
         RecipeMatchResultDTO
-    ] = await fridge_matcher_service.find_full_matches(
-        user_id=user_id,
+    ] = await fridge_matcher_service.match_shared_fridge(
+        match_type="full",
         locale=locale,
     )
 
@@ -264,14 +307,12 @@ async def handle_fridge_match_full_callback(
 async def handle_fridge_match_partial_callback(
     callback: CallbackQuery,
     fridge_matcher_service: FridgeMatcherService,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    user_id: int = user.id if user is not None else 0
     matches: list[
         RecipeMatchResultDTO
-    ] = await fridge_matcher_service.find_partial_matches(
-        user_id=user_id,
+    ] = await fridge_matcher_service.match_shared_fridge(
+        match_type="partial",
         max_missing=2,
         locale=locale,
     )
@@ -313,7 +354,6 @@ async def handle_fridge_add_input(
     message: Message,
     fridge_service: FridgeService,
     state: FSMContext,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     raw_text: str = (message.text or "").strip()
@@ -321,14 +361,10 @@ async def handle_fridge_add_input(
         await state.clear()
         return
 
-    user_id: int = user.id if user is not None else 0
-    added: list[FridgeItemDTO] = await fridge_service.add_ingredients(
-        user_id,
-        raw_text,
-    )
+    added: list[FridgeItemDTO] = await fridge_service.add_ingredients(raw_text)
     await state.clear()
 
-    items: list[FridgeItemDTO] = await fridge_service.get_user_items(user_id)
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
     added_count_msg: str = t("fridge_added", locale=locale, count=len(added))
     text, keyboard = _render_fridge_view(items=items, locale=locale)
 
@@ -343,7 +379,6 @@ async def handle_fridge_replace_input(
     message: Message,
     fridge_service: FridgeService,
     state: FSMContext,
-    user: User | None = None,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     raw_text: str = (message.text or "").strip()
@@ -351,14 +386,12 @@ async def handle_fridge_replace_input(
         await state.clear()
         return
 
-    user_id: int = user.id if user is not None else 0
     replaced: list[FridgeItemDTO] = await fridge_service.replace_ingredients(
-        user_id,
         raw_text,
     )
     await state.clear()
 
-    items: list[FridgeItemDTO] = await fridge_service.get_user_items(user_id)
+    items: list[FridgeItemDTO] = await fridge_service.get_shared_items()
     replaced_count_msg: str = t(
         "fridge_replaced",
         locale=locale,
