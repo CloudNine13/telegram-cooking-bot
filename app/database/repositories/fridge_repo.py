@@ -1,82 +1,79 @@
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.database.models.fridge import FridgeItem
 from app.database.repositories.base import BaseRepo
+from app.schemas.fridge import FridgeItemCreateDTO
 
 
 class FridgeRepo(BaseRepo):
-    async def get_user_items(self, user_id: int) -> list[FridgeItem]:
-        stmt = (
-            select(FridgeItem)
-            .where(FridgeItem.user_id == user_id)
-            .order_by(FridgeItem.created_at.asc(), FridgeItem.id.asc())
+    async def get_all(self) -> list[FridgeItem]:
+        stmt = select(FridgeItem).order_by(
+            FridgeItem.raw_name.asc(),
+            FridgeItem.id.asc(),
         )
         result = await self.session.scalars(stmt)
 
         return list(result.all())
 
-    async def get_user_normalized_names(self, user_id: int) -> list[str]:
-        stmt = (
-            select(FridgeItem.normalized_name)
-            .where(FridgeItem.user_id == user_id)
-            .order_by(FridgeItem.id.asc())
-        )
+    async def get_by_id(self, item_id: int) -> FridgeItem | None:
+        stmt = select(FridgeItem).where(FridgeItem.id == item_id)
+        result = await self.session.scalars(stmt)
+
+        return result.first()
+
+    async def get_normalized_names(self) -> list[str]:
+        stmt = select(FridgeItem.normalized_name).order_by(FridgeItem.id.asc())
         result = await self.session.scalars(stmt)
 
         return list(result.all())
 
-    async def add_items(
+    async def bulk_create(
         self,
-        user_id: int,
-        items: list[tuple[str, str]],
+        items: list[FridgeItemCreateDTO],
     ) -> list[FridgeItem]:
-        created_items: list[FridgeItem] = []
-        for raw_name, normalized_name in items:
-            item = FridgeItem(
-                user_id=user_id,
-                raw_name=raw_name,
-                normalized_name=normalized_name,
-            )
-            self.session.add(item)
-            created_items.append(item)
+        if not items:
+            return []
 
+        values_list: list[dict[str, str]] = [
+            {
+                "raw_name": item.raw_name,
+                "normalized_name": item.normalized_name or item.raw_name,
+            }
+            for item in items
+            if (item.normalized_name or item.raw_name)
+        ]
+        if not values_list:
+            return []
+
+        stmt = (
+            pg_insert(FridgeItem)
+            .values(values_list)
+            .on_conflict_do_nothing(index_elements=["normalized_name"])
+            .returning(FridgeItem)
+        )
+        result = await self.session.scalars(stmt)
+        inserted: list[FridgeItem] = list(result.all())
         await self.session.flush()
 
-        return created_items
+        return inserted
 
-    async def replace_items(
-        self,
-        user_id: int,
-        items: list[tuple[str, str]],
-    ) -> list[FridgeItem]:
-        await self.clear_items(user_id)
+    async def delete_by_id(self, item_id: int) -> bool:
+        stmt = delete(FridgeItem).where(FridgeItem.id == item_id)
+        result = await self.session.execute(stmt)
 
-        return await self.add_items(user_id, items)
+        return result.rowcount > 0
 
-    async def clear_items(self, user_id: int) -> int:
-        stmt = delete(FridgeItem).where(FridgeItem.user_id == user_id)
+    async def delete_all(self) -> int:
+        stmt = delete(FridgeItem)
         result = await self.session.execute(stmt)
 
         return result.rowcount
 
-    async def delete_item(self, user_id: int, item_id: int) -> bool:
-        stmt = delete(FridgeItem).where(
-            FridgeItem.user_id == user_id,
-            FridgeItem.id == item_id,
-        )
-        result = await self.session.execute(stmt)
-
-        return result.rowcount > 0
-
-    async def delete_item_by_name(
+    async def replace_all(
         self,
-        user_id: int,
-        normalized_name: str,
-    ) -> bool:
-        stmt = delete(FridgeItem).where(
-            FridgeItem.user_id == user_id,
-            FridgeItem.normalized_name == normalized_name,
-        )
-        result = await self.session.execute(stmt)
+        items: list[FridgeItemCreateDTO],
+    ) -> list[FridgeItem]:
+        await self.delete_all()
 
-        return result.rowcount > 0
+        return await self.bulk_create(items)
