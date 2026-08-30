@@ -2,9 +2,10 @@ import re
 from datetime import UTC, datetime
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.admin import IsAdminFilter
@@ -15,12 +16,15 @@ from app.bot.keyboards.admin import (
     get_admin_category_select_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_delete_confirm_keyboard,
+    get_admin_edit_recipe_keyboard,
+    get_admin_recipe_actions_keyboard,
     get_admin_skip_cancel_keyboard,
 )
 from app.bot.keyboards.callbacks import AdminActionCallback
 from app.bot.states.recipe_wizard import (
     CategoryCreateWizard,
     RecipeCreateWizard,
+    RecipeEditWizard,
     RecipeTemplateImportState,
 )
 from app.core.i18n.locales import DEFAULT_LOCALE
@@ -31,6 +35,7 @@ from app.schemas.recipe import (
     ParsedRecipeTemplateDTO,
     RecipeCreateDTO,
     RecipeDTO,
+    RecipeUpdateDTO,
 )
 from app.services.category_service import CategoryService
 from app.services.media_downloader_service import MediaDownloaderService
@@ -39,6 +44,38 @@ from app.services.recipe_service import RecipeService
 admin_router: Router = Router(name="admin")
 admin_router.message.filter(IsAdminFilter())
 admin_router.callback_query.filter(IsAdminFilter())
+
+
+async def _edit_or_resend_message(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return
+
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except TelegramBadRequest:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
 
 
 def _parse_wizard_ingredients(
@@ -141,7 +178,8 @@ async def handle_admin_dashboard_callback(
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -161,7 +199,8 @@ async def handle_admin_cancel(
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -199,7 +238,8 @@ async def handle_add_wizard_callback(
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -274,7 +314,8 @@ async def handle_wizard_category_select(
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -414,7 +455,8 @@ async def handle_wizard_skip_photo(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -463,7 +505,8 @@ async def handle_wizard_skip_video(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -519,7 +562,8 @@ async def handle_wizard_skip_pdf(
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -572,7 +616,8 @@ async def handle_add_template_callback(
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -625,6 +670,638 @@ async def handle_template_message(
 
 
 @admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_recipe"),
+)
+async def handle_edit_recipe_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    recipe_id: int | None = callback_data.target_id
+    if recipe_id is None:
+        await callback.answer()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    recipe: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
+    if recipe is None:
+        await callback.answer(
+            text=t("recipe_not_found", locale=locale),
+            show_alert=True,
+        )
+        return
+
+    await state.clear()
+    await state.set_state(RecipeEditWizard.select_field)
+    await state.update_data(recipe_id=recipe_id)
+
+    title: str = (
+        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
+    )
+    text: str = t("admin_edit_select_field", locale=locale, title=title)
+    keyboard = get_admin_edit_recipe_keyboard(
+        recipe_id=recipe.id,
+        locale=locale,
+    )
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_title_en"),
+)
+async def handle_edit_title_en_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.title_en)
+    text: str = t("admin_edit_prompt_title_en", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_title_ru"),
+)
+async def handle_edit_title_ru_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.title_ru)
+    text: str = t("admin_edit_prompt_title_ru", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_category"),
+)
+async def handle_edit_category_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.category_id)
+
+    category_service: CategoryService = CategoryService(session=session)
+    categories: list[CategoryDTO] = await category_service.get_all_categories()
+
+    text: str = t("admin_edit_prompt_category", locale=locale)
+    keyboard = get_admin_category_select_keyboard(
+        categories=categories,
+        locale=locale,
+    )
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_prep_time"),
+)
+async def handle_edit_prep_time_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.prep_time)
+    text: str = t("admin_edit_prompt_prep_time", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_ingredients"),
+)
+async def handle_edit_ingredients_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.ingredients)
+    text: str = t("admin_edit_prompt_ingredients", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_instructions_en"),
+)
+async def handle_edit_instructions_en_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.instructions_en)
+    text: str = t("admin_edit_prompt_instructions_en", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_instructions_ru"),
+)
+async def handle_edit_instructions_ru_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.instructions_ru)
+    text: str = t("admin_edit_prompt_instructions_ru", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    AdminActionCallback.filter(F.action == "edit_media"),
+)
+async def handle_edit_media_callback(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    if callback_data.target_id is not None:
+        await state.update_data(recipe_id=callback_data.target_id)
+    await state.set_state(RecipeEditWizard.media)
+    text: str = t("admin_edit_prompt_media", locale=locale)
+    keyboard = get_admin_cancel_keyboard(locale=locale)
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.message(RecipeEditWizard.title_en)
+async def handle_edit_title_en_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    title_en: str = (message.text or "").strip()
+    if not title_en:
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(title_en=title_en),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else title_en)
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.message(RecipeEditWizard.title_ru)
+async def handle_edit_title_ru_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    title_ru: str = (message.text or "").strip()
+    if not title_ru:
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(title_ru=title_ru),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else title_ru)
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.callback_query(
+    RecipeEditWizard.category_id,
+    AdminActionCallback.filter(F.action == "select_category"),
+)
+async def handle_edit_category_select(
+    callback: CallbackQuery,
+    callback_data: AdminActionCallback,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    category_id: int = callback_data.target_id or 1
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        await callback.answer()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(category_id=category_id),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    if callback.message is not None:
+        await _edit_or_resend_message(
+            message=callback.message,
+            text=text,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@admin_router.message(RecipeEditWizard.prep_time)
+async def handle_edit_prep_time_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    raw_text: str = (message.text or "").strip()
+    try:
+        prep_time: int = int(raw_text)
+        if prep_time < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer(
+            text=t("error_invalid_number", locale=locale),
+            reply_markup=get_admin_cancel_keyboard(locale=locale),
+        )
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(prep_time_minutes=prep_time),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.message(RecipeEditWizard.ingredients)
+async def handle_edit_ingredients_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    raw_text: str = (message.text or "").strip()
+    if not raw_text:
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    lines: list[str] = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    ingredients: list[IngredientCreateDTO] = []
+    for line in lines:
+        name, qty, unit = RecipeService.parse_ingredient_line(line)
+        if name:
+            ingredients.append(
+                IngredientCreateDTO(
+                    name_en=name,
+                    name_ru=name,
+                    quantity=qty,
+                    unit=unit,
+                ),
+            )
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(ingredients=ingredients),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.message(RecipeEditWizard.instructions_en)
+async def handle_edit_instructions_en_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    instructions_en: str = (message.text or "").strip()
+    if not instructions_en:
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(instructions_en=instructions_en),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.message(RecipeEditWizard.instructions_ru)
+async def handle_edit_instructions_ru_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    instructions_ru: str = (message.text or "").strip()
+    if not instructions_ru:
+        return
+
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=RecipeUpdateDTO(instructions_ru=instructions_ru),
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.message(RecipeEditWizard.media)
+async def handle_edit_media_input(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    data = await state.get_data()
+    recipe_id: int | None = data.get("recipe_id")
+    if recipe_id is None:
+        await state.clear()
+        return
+
+    dto: RecipeUpdateDTO = RecipeUpdateDTO()
+    if message.photo:
+        photo_id: str = message.photo[-1].file_id
+        dto = RecipeUpdateDTO(photo_file_id=photo_id)
+    elif message.video:
+        video_id: str = message.video.file_id
+        dto = RecipeUpdateDTO(video_file_id=video_id)
+    elif message.document:
+        doc_id: str = message.document.file_id
+        dto = RecipeUpdateDTO(document_file_id=doc_id)
+    elif message.text:
+        raw_text: str = message.text.strip()
+        if raw_text.lower() == "/clear":
+            dto = RecipeUpdateDTO(
+                photo_file_id="",
+                video_file_id="",
+                document_file_id="",
+                source_url="",
+                instagram_url="",
+            )
+        elif MediaDownloaderService.is_supported_url(raw_text):
+            dto = RecipeUpdateDTO(instagram_url=raw_text)
+        elif raw_text.startswith(("http://", "https://")):
+            dto = RecipeUpdateDTO(source_url=raw_text)
+        else:
+            dto = RecipeUpdateDTO(photo_file_id=raw_text)
+
+    recipe_service: RecipeService = RecipeService(session=session)
+    updated: RecipeDTO | None = await recipe_service.update_recipe(
+        recipe_id=recipe_id,
+        dto=dto,
+    )
+    await session.commit()
+    await state.clear()
+
+    title: str = (
+        updated.title_ru
+        if updated and locale == "ru" and updated.title_ru
+        else (updated.title_en if updated else "")
+    )
+    text: str = t("admin_recipe_updated", locale=locale, title=title)
+    keyboard = get_admin_recipe_actions_keyboard(
+        recipe_id=recipe_id,
+        locale=locale,
+    )
+
+    await message.answer(
+        text=text,
+        reply_markup=keyboard,
+    )
+
+
+@admin_router.callback_query(
     AdminActionCallback.filter(F.action == "delete_recipe"),
 )
 async def handle_delete_recipe_callback(
@@ -657,7 +1334,8 @@ async def handle_delete_recipe_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -683,7 +1361,8 @@ async def handle_delete_confirm_callback(
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -701,7 +1380,8 @@ async def handle_delete_cancel_callback(
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -759,7 +1439,8 @@ async def handle_manage_categories_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -796,7 +1477,8 @@ async def handle_category_detail_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -830,7 +1512,8 @@ async def handle_delete_category_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -851,7 +1534,8 @@ async def handle_add_category_callback(
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -958,7 +1642,8 @@ async def handle_category_parent_select(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )

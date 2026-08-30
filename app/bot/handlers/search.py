@@ -1,7 +1,8 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import (
@@ -27,6 +28,38 @@ from app.services.fridge_matcher_service import FridgeMatcherService
 from app.services.recipe_service import RecipeService
 
 search_router: Router = Router(name="search")
+
+
+async def _edit_or_resend_message(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return
+
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except TelegramBadRequest:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
 
 
 @search_router.message(Command("search"))
@@ -60,7 +93,8 @@ async def handle_search_mode_menu(
     keyboard = get_search_menu_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -78,7 +112,8 @@ async def handle_search_mode_global(
     keyboard = get_cancel_keyboard(locale=locale, target="search")
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -96,7 +131,8 @@ async def handle_search_mode_instant(
     keyboard = get_cancel_keyboard(locale=locale, target="search")
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -133,7 +169,8 @@ async def handle_category_search_callback(
     keyboard = get_cancel_keyboard(locale=locale, target="search")
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -341,7 +378,8 @@ async def handle_search_pagination(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=results_text,
             reply_markup=keyboard,
         )

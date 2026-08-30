@@ -1,7 +1,8 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import FridgeActionCallback
@@ -21,10 +22,42 @@ from app.services.fridge_service import FridgeService
 fridge_router: Router = Router(name="fridge")
 
 
+async def _edit_or_resend_message(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return
+
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except TelegramBadRequest:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+
+
 def _render_fridge_view(
     items: list[FridgeItemDTO],
     locale: str = DEFAULT_LOCALE,
-) -> tuple[str, object]:
+) -> tuple[str, InlineKeyboardMarkup]:
     if not items:
         text: str = (
             f"{t('fridge_title', locale=locale)}\n\n{t('fridge_empty', locale=locale)}"
@@ -57,7 +90,7 @@ async def handle_fridge_command(
     text, keyboard = _render_fridge_view(items=items, locale=locale)
     await message.answer(
         text=text,
-        reply_markup=keyboard,  # type: ignore[arg-type]
+        reply_markup=keyboard,
     )
 
 
@@ -78,9 +111,10 @@ async def handle_fridge_view_callback(
 
     text, keyboard = _render_fridge_view(items=items, locale=locale)
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
-            reply_markup=keyboard,  # type: ignore[arg-type]
+            reply_markup=keyboard,
         )
     await callback.answer()
 
@@ -96,7 +130,8 @@ async def handle_fridge_add_callback(
     keyboard = get_fridge_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -116,7 +151,8 @@ async def handle_fridge_replace_callback(
     keyboard = get_fridge_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -141,7 +177,8 @@ async def handle_fridge_clear_callback(
     keyboard = get_fridge_main_keyboard(items_count=0, locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -163,9 +200,10 @@ async def handle_fridge_cancel_callback(
 
     text, keyboard = _render_fridge_view(items=items, locale=locale)
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
-            reply_markup=keyboard,  # type: ignore[arg-type]
+            reply_markup=keyboard,
         )
     await callback.answer()
 
@@ -196,7 +234,8 @@ async def handle_fridge_match_full_callback(
             locale=locale,
         )
         if callback.message is not None:
-            await callback.message.edit_text(
+            await _edit_or_resend_message(
+                message=callback.message,
                 text=text,
                 reply_markup=keyboard,
             )
@@ -211,7 +250,8 @@ async def handle_fridge_match_full_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -245,7 +285,8 @@ async def handle_fridge_match_partial_callback(
             locale=locale,
         )
         if callback.message is not None:
-            await callback.message.edit_text(
+            await _edit_or_resend_message(
+                message=callback.message,
                 text=text,
                 reply_markup=keyboard,
             )
@@ -260,7 +301,8 @@ async def handle_fridge_match_partial_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -292,7 +334,7 @@ async def handle_fridge_add_input(
 
     await message.answer(
         text=f"{added_count_msg}\n\n{text}",
-        reply_markup=keyboard,  # type: ignore[arg-type]
+        reply_markup=keyboard,
     )
 
 
@@ -325,5 +367,5 @@ async def handle_fridge_replace_input(
 
     await message.answer(
         text=f"{replaced_count_msg}\n\n{text}",
-        reply_markup=keyboard,  # type: ignore[arg-type]
+        reply_markup=keyboard,
     )

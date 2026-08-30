@@ -77,6 +77,88 @@ def get_admin_recipe_actions_keyboard(
     return builder.as_markup()
 
 
+def get_admin_edit_recipe_keyboard(
+    recipe_id: int,
+    locale: str = DEFAULT_LOCALE,
+) -> InlineKeyboardMarkup:
+    builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_edit_title_en", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_title_en",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("btn_edit_title_ru", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_title_ru",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_edit_category", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_category",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("btn_edit_prep_time", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_prep_time",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_edit_ingredients", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_ingredients",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_edit_instructions_en", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_instructions_en",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("btn_edit_instructions_ru", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_instructions_ru",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_edit_media", locale=locale),
+            callback_data=AdminActionCallback(
+                action="edit_media",
+                target_id=recipe_id,
+            ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_back", locale=locale),
+            callback_data=AdminActionCallback(action="dashboard").pack(),
+        ),
+    )
+
+    return builder.as_markup()
+
+
 def get_admin_delete_confirm_keyboard(
     recipe_id: int,
     locale: str = DEFAULT_LOCALE,

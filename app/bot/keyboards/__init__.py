@@ -5,6 +5,7 @@ from app.bot.keyboards.admin import (
     get_admin_category_select_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_delete_confirm_keyboard,
+    get_admin_edit_recipe_keyboard,
     get_admin_recipe_actions_keyboard,
     get_admin_skip_cancel_keyboard,
 )
@@ -62,6 +63,7 @@ __all__: list[str] = [
     "get_admin_category_select_keyboard",
     "get_admin_dashboard_keyboard",
     "get_admin_delete_confirm_keyboard",
+    "get_admin_edit_recipe_keyboard",
     "get_admin_recipe_actions_keyboard",
     "get_admin_skip_cancel_keyboard",
     "get_back_keyboard",

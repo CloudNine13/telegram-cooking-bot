@@ -1,7 +1,8 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import (
@@ -35,6 +36,38 @@ from app.services.pdf_export_service import (
 from app.services.recipe_service import RecipeService
 
 catalog_router: Router = Router(name="catalog")
+
+
+async def _edit_or_resend_message(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return
+
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except TelegramBadRequest:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
 
 
 def _format_recipe_card(
@@ -136,7 +169,8 @@ async def handle_top_categories_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -152,7 +186,7 @@ async def handle_category_nav_callback(
     session: AsyncSession,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_id: int = callback_data.category_id  # type: ignore[assignment]
+    category_id: int = int(callback_data.category_id or 1)
     category_service: CategoryService = CategoryService(session=session)
     recipe_service: RecipeService = RecipeService(session=session)
 
@@ -174,7 +208,8 @@ async def handle_category_nav_callback(
             locale=locale,
         )
         if callback.message is not None:
-            await callback.message.edit_text(
+            await _edit_or_resend_message(
+                message=callback.message,
                 text=text,
                 reply_markup=keyboard,
             )
@@ -212,7 +247,8 @@ async def handle_category_nav_callback(
             parent_id=callback_data.parent_id,
         )
         if callback.message is not None:
-            await callback.message.edit_text(
+            await _edit_or_resend_message(
+                message=callback.message,
                 text=empty_text,
                 reply_markup=empty_keyboard,
             )
@@ -236,7 +272,8 @@ async def handle_category_nav_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=header_text,
             reply_markup=list_keyboard,
         )
@@ -290,7 +327,8 @@ async def handle_sort_toggle_callback(
     )
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=header_text,
             reply_markup=list_keyboard,
         )
@@ -335,14 +373,18 @@ async def handle_recipe_view_callback(
 
     if callback.message is not None:
         if recipe.photo_file_id:
-            await callback.message.delete()
+            try:
+                await callback.message.delete()
+            except TelegramBadRequest:
+                pass
             await callback.message.answer_photo(
                 photo=recipe.photo_file_id,
                 caption=card_text,
                 reply_markup=view_keyboard,
             )
         else:
-            await callback.message.edit_text(
+            await _edit_or_resend_message(
+                message=callback.message,
                 text=card_text,
                 reply_markup=view_keyboard,
             )

@@ -300,7 +300,7 @@ def get_recipe_view_keyboard(
         back_callback_str = FridgeActionCallback(
             action="match_partial",
         ).pack()
-    elif source == "search":
+    elif source == "fridge_instant" or source == "search":
         back_callback_str = MainMenuCallback(target="search").pack()
     else:
         back_callback_str = MainMenuCallback(target="main").pack()

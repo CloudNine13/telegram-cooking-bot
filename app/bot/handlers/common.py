@@ -1,7 +1,8 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callbacks import (
@@ -19,6 +20,38 @@ from app.database.models.user import User
 from app.database.repositories.user_repo import UserRepo
 
 common_router: Router = Router(name="common")
+
+
+async def _edit_or_resend_message(
+    message: Message,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    if message.photo:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
+        return
+
+    try:
+        await message.edit_text(
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except TelegramBadRequest:
+        try:
+            await message.delete()
+        except TelegramBadRequest:
+            pass
+        await message.answer(
+            text=text,
+            reply_markup=reply_markup,
+        )
 
 
 @common_router.message(CommandStart())
@@ -95,7 +128,8 @@ async def handle_main_menu_callback(
     keyboard = get_main_menu_keyboard(locale=locale, is_admin=is_admin)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -111,7 +145,8 @@ async def handle_language_callback(
     keyboard = get_language_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -127,7 +162,8 @@ async def handle_search_menu_callback(
     keyboard = get_search_menu_keyboard(locale=locale)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=text,
             reply_markup=keyboard,
         )
@@ -152,7 +188,8 @@ async def handle_language_select(
     menu_keyboard = get_main_menu_keyboard(locale=new_locale, is_admin=is_admin)
 
     if callback.message is not None:
-        await callback.message.edit_text(
+        await _edit_or_resend_message(
+            message=callback.message,
             text=updated_text,
             reply_markup=menu_keyboard,
         )

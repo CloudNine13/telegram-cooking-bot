@@ -82,10 +82,16 @@ def get_fridge_match_results_keyboard(
             ),
         )
 
+    back_cb: str = (
+        MainMenuCallback(target="search").pack()
+        if match_type == "instant"
+        else FridgeActionCallback(action="view").pack()
+    )
+
     builder.row(
         InlineKeyboardButton(
             text=t("btn_back", locale=locale),
-            callback_data=FridgeActionCallback(action="view").pack(),
+            callback_data=back_cb,
         ),
         InlineKeyboardButton(
             text=t("btn_main_menu", locale=locale),

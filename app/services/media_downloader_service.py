@@ -95,7 +95,7 @@ class MediaDownloaderService:
                 return None
         else:
             try:
-                import yt_dlp  # type: ignore[import-not-found]
+                import yt_dlp
 
                 ydl_opts = {
                     "format": "mp4/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
