@@ -3,6 +3,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.keyboards.callbacks import (
     AdminActionCallback,
+    FridgeActionCallback,
     MainMenuCallback,
 )
 from app.core.i18n.helpers import get_localized_text
@@ -34,6 +35,12 @@ def get_admin_dashboard_keyboard(
             callback_data=AdminActionCallback(
                 action="manage_categories",
             ).pack(),
+        ),
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_fridge", locale=locale),
+            callback_data=FridgeActionCallback(action="view").pack(),
         ),
     )
     builder.row(
@@ -159,7 +166,7 @@ def get_admin_delete_confirm_keyboard(
 
     builder.row(
         InlineKeyboardButton(
-            text=t("btn_admin_delete_recipe", locale=locale),
+            text=t("btn_confirm_delete", locale=locale),
             callback_data=AdminActionCallback(
                 action="delete_confirm",
                 target_id=recipe_id,

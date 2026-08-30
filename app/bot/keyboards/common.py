@@ -32,19 +32,32 @@ def get_main_menu_keyboard(
             callback_data=SearchModeCallback(mode="menu").pack(),
         ),
     )
-    builder.row(
-        InlineKeyboardButton(
-            text=t("btn_fridge", locale=locale),
-            callback_data=FridgeActionCallback(action="view").pack(),
-        ),
-        InlineKeyboardButton(
-            text=t("btn_favorites", locale=locale),
-            callback_data=PaginationCallback(
-                target="favorites",
-                page=1,
-            ).pack(),
-        ),
-    )
+
+    if is_admin:
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_fridge", locale=locale),
+                callback_data=FridgeActionCallback(action="view").pack(),
+            ),
+            InlineKeyboardButton(
+                text=t("btn_favorites", locale=locale),
+                callback_data=PaginationCallback(
+                    target="favorites",
+                    page=1,
+                ).pack(),
+            ),
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_favorites", locale=locale),
+                callback_data=PaginationCallback(
+                    target="favorites",
+                    page=1,
+                ).pack(),
+            ),
+        )
+
     builder.row(
         InlineKeyboardButton(
             text=t("btn_language", locale=locale),

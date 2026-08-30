@@ -9,7 +9,7 @@ from app.bot.keyboards.callbacks import (
 from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
-from app.schemas.fridge import RecipeMatchResultDTO
+from app.schemas.fridge import FridgeItemDTO, RecipeMatchResultDTO
 
 
 def get_fridge_main_keyboard(
@@ -18,31 +18,12 @@ def get_fridge_main_keyboard(
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
-    builder.row(
-        InlineKeyboardButton(
-            text=t("btn_fridge_add", locale=locale),
-            callback_data=FridgeActionCallback(action="add").pack(),
-        ),
-        InlineKeyboardButton(
-            text=t("btn_fridge_replace", locale=locale),
-            callback_data=FridgeActionCallback(action="replace").pack(),
-        ),
-    )
-
     if items_count > 0:
-        builder.row(
-            InlineKeyboardButton(
-                text=t("btn_fridge_clear", locale=locale),
-                callback_data=FridgeActionCallback(action="clear").pack(),
-            ),
-        )
         builder.row(
             InlineKeyboardButton(
                 text=t("btn_fridge_match_full", locale=locale),
                 callback_data=FridgeActionCallback(action="match_full").pack(),
             ),
-        )
-        builder.row(
             InlineKeyboardButton(
                 text=t("btn_fridge_match_partial", locale=locale),
                 callback_data=FridgeActionCallback(
@@ -50,11 +31,67 @@ def get_fridge_main_keyboard(
                 ).pack(),
             ),
         )
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_fridge_add", locale=locale),
+                callback_data=FridgeActionCallback(action="add").pack(),
+            ),
+            InlineKeyboardButton(
+                text=t("btn_fridge_replace", locale=locale),
+                callback_data=FridgeActionCallback(action="replace").pack(),
+            ),
+        )
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_fridge_remove_items", locale=locale),
+                callback_data=FridgeActionCallback(
+                    action="delete_menu",
+                ).pack(),
+            ),
+            InlineKeyboardButton(
+                text=t("btn_fridge_clear", locale=locale),
+                callback_data=FridgeActionCallback(action="clear").pack(),
+            ),
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(
+                text=t("btn_fridge_add", locale=locale),
+                callback_data=FridgeActionCallback(action="add").pack(),
+            ),
+        )
 
     builder.row(
         InlineKeyboardButton(
             text=t("btn_main_menu", locale=locale),
             callback_data=MainMenuCallback(target="main").pack(),
+        ),
+    )
+
+    return builder.as_markup()
+
+
+def get_fridge_remove_items_keyboard(
+    items: list[FridgeItemDTO],
+    locale: str = DEFAULT_LOCALE,
+) -> InlineKeyboardMarkup:
+    builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
+
+    for item in items:
+        builder.button(
+            text=f"❌ {item.raw_name}",
+            callback_data=FridgeActionCallback(
+                action="delete_item",
+                item_id=item.id,
+            ).pack(),
+        )
+
+    builder.adjust(2)
+
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_back", locale=locale),
+            callback_data=FridgeActionCallback(action="view").pack(),
         ),
     )
 

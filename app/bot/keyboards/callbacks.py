@@ -35,6 +35,8 @@ class CategorySearchCallback(CallbackData, prefix="cat_search"):
 
 class FridgeActionCallback(CallbackData, prefix="fridge_act"):
     action: str
+    item_id: int | None = None
+    page: int = 1
 
 
 class FavoriteToggleCallback(CallbackData, prefix="fav_toggle"):
