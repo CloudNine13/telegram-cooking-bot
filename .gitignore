@@ -1,0 +1,9 @@
+.agents
+graphify-out
+AGENTS.md
+skills-lock.json
+SPEC.md
+.env
+.venv
+__pycache__/
+*.pyc
