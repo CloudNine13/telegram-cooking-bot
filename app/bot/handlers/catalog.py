@@ -72,11 +72,36 @@ async def _edit_or_resend_message(
         )
 
 
+def _format_recipe_title(
+    title_dict: dict[str, str] | None,
+    locale: str = DEFAULT_LOCALE,
+) -> str:
+    if not title_dict:
+        return get_localized_text(title_dict, locale)
+
+    ru_title: str | None = title_dict.get("ru")
+    en_title: str | None = title_dict.get("en")
+
+    if ru_title and en_title:
+        if ru_title == en_title:
+            return ru_title
+        return f"{ru_title} / {en_title}"
+
+    if ru_title:
+        return ru_title
+
+    if en_title:
+        return en_title
+
+    return get_localized_text(title_dict, locale)
+
+
 def _format_recipe_card(
     recipe: RecipeDTO,
     locale: str = DEFAULT_LOCALE,
 ) -> str:
-    title: str = html.escape(get_localized_text(recipe.title, locale))
+    raw_title: str = _format_recipe_title(recipe.title, locale)
+    title: str = html.escape(raw_title)
     category_name: str = ""
     if recipe.category is not None:
         category_name = html.escape(
@@ -356,6 +381,7 @@ async def handle_recipe_view_callback(
     recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
+    is_admin: bool = False,
 ) -> None:
     recipe: RecipeDTO | None = await recipe_service.get_recipe(
         callback_data.recipe_id,
@@ -382,6 +408,7 @@ async def handle_recipe_view_callback(
         source=callback_data.source,
         category_id=callback_data.category_id,
         page=callback_data.page,
+        is_admin=is_admin,
     )
 
     if callback.message is not None:
@@ -494,6 +521,7 @@ async def handle_favorite_toggle_callback(
     recipe_service: RecipeService,
     user: User | None = None,
     locale: str = DEFAULT_LOCALE,
+    is_admin: bool = False,
 ) -> None:
     if user is None:
         await callback.answer()
@@ -529,6 +557,7 @@ async def handle_favorite_toggle_callback(
         source=callback_data.source,
         category_id=callback_data.category_id,
         page=callback_data.page,
+        is_admin=is_admin,
     )
 
     if callback.message is not None:
