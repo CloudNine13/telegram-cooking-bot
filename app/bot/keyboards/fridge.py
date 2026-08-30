@@ -6,6 +6,7 @@ from app.bot.keyboards.callbacks import (
     MainMenuCallback,
     RecipeViewCallback,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.fridge import RecipeMatchResultDTO
@@ -68,7 +69,7 @@ def get_fridge_match_results_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for match in matches:
-        title: str = match.recipe.title_ru if locale == "ru" else match.recipe.title_en
+        title: str = get_localized_text(match.recipe.title, locale=locale)
         missing_count: int = len(match.missing_ingredients)
         btn_text: str = f"{title} (-{missing_count})" if missing_count > 0 else title
 

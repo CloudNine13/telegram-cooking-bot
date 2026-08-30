@@ -1,3 +1,4 @@
+import html
 import re
 from datetime import UTC, datetime
 
@@ -26,6 +27,7 @@ from app.bot.states.recipe_wizard import (
     RecipeEditWizard,
     RecipeTemplateImportState,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.category import CategoryCreateDTO, CategoryDTO
@@ -77,34 +79,18 @@ async def _edit_or_resend_message(
         )
 
 
-def _parse_wizard_ingredients(
-    en_raw: str,
-    ru_raw: str,
-) -> list[IngredientCreateDTO]:
-    en_lines: list[str] = [line.strip() for line in en_raw.splitlines() if line.strip()]
-    ru_lines: list[str] = [line.strip() for line in ru_raw.splitlines() if line.strip()]
-    max_len: int = max(len(en_lines), len(ru_lines))
+def _parse_wizard_ingredients(raw_text: str) -> list[IngredientCreateDTO]:
+    lines: list[str] = [line.strip() for line in raw_text.splitlines() if line.strip()]
     dtos: list[IngredientCreateDTO] = []
 
-    for i in range(max_len):
-        en_line: str = en_lines[i] if i < len(en_lines) else ""
-        ru_line: str = ru_lines[i] if i < len(ru_lines) else ""
-
-        name_en, qty_en, unit_en = RecipeService.parse_ingredient_line(en_line)
-        name_ru, qty_ru, unit_ru = RecipeService.parse_ingredient_line(ru_line)
-
-        final_name_en: str = name_en or name_ru
-        final_name_ru: str = name_ru or name_en
-        final_qty: float | None = qty_en if qty_en is not None else qty_ru
-        final_unit: str | None = unit_en if unit_en is not None else unit_ru
-
-        if final_name_en or final_name_ru:
+    for line in lines:
+        name, qty, unit = RecipeService.parse_ingredient_line(line)
+        if name:
             dtos.append(
                 IngredientCreateDTO(
-                    name_en=final_name_en,
-                    name_ru=final_name_ru,
-                    quantity=final_qty,
-                    unit=final_unit,
+                    name=name,
+                    quantity=qty,
+                    unit=unit,
                 ),
             )
 
@@ -117,17 +103,19 @@ async def _save_wizard_recipe(
 ) -> RecipeDTO:
     data = await state.get_data()
     ingredients: list[IngredientCreateDTO] = _parse_wizard_ingredients(
-        en_raw=data.get("ingredients_en", ""),
-        ru_raw=data.get("ingredients_ru", ""),
+        data.get("ingredients", ""),
     )
+
+    title: dict[str, str] = {
+        "en": str(data.get("title_en", "")),
+        "ru": str(data.get("title_ru", "")),
+    }
 
     dto = RecipeCreateDTO(
         category_id=int(data.get("category_id", 1)),
-        title_en=str(data.get("title_en", "")),
-        title_ru=str(data.get("title_ru", "")),
+        title=title,
         prep_time_minutes=int(data.get("prep_time_minutes", 0)),
-        instructions_en=str(data.get("instructions_en", "")),
-        instructions_ru=str(data.get("instructions_ru", "")),
+        instructions=str(data.get("instructions", "")),
         photo_file_id=data.get("photo_file_id"),
         video_file_id=data.get("video_file_id"),
         document_file_id=data.get("document_file_id"),
@@ -337,8 +325,8 @@ async def handle_wizard_prep_time(
         return
 
     await state.update_data(prep_time_minutes=prep_time)
-    await state.set_state(RecipeCreateWizard.ingredients_en)
-    text: str = t("admin_wizard_ingredients_en", locale=locale)
+    await state.set_state(RecipeCreateWizard.ingredients)
+    text: str = t("admin_wizard_ingredients", locale=locale)
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     await message.answer(
@@ -347,19 +335,19 @@ async def handle_wizard_prep_time(
     )
 
 
-@admin_router.message(RecipeCreateWizard.ingredients_en)
-async def handle_wizard_ingredients_en(
+@admin_router.message(RecipeCreateWizard.ingredients)
+async def handle_wizard_ingredients(
     message: Message,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    ingredients_en: str = (message.text or "").strip()
-    if not ingredients_en:
+    ingredients_text: str = (message.text or "").strip()
+    if not ingredients_text:
         return
 
-    await state.update_data(ingredients_en=ingredients_en)
-    await state.set_state(RecipeCreateWizard.ingredients_ru)
-    text: str = t("admin_wizard_ingredients_ru", locale=locale)
+    await state.update_data(ingredients=ingredients_text)
+    await state.set_state(RecipeCreateWizard.instructions)
+    text: str = t("admin_wizard_instructions", locale=locale)
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     await message.answer(
@@ -368,59 +356,17 @@ async def handle_wizard_ingredients_en(
     )
 
 
-@admin_router.message(RecipeCreateWizard.ingredients_ru)
-async def handle_wizard_ingredients_ru(
+@admin_router.message(RecipeCreateWizard.instructions)
+async def handle_wizard_instructions(
     message: Message,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    ingredients_ru: str = (message.text or "").strip()
-    if not ingredients_ru:
+    instructions_text: str = (message.text or "").strip()
+    if not instructions_text:
         return
 
-    await state.update_data(ingredients_ru=ingredients_ru)
-    await state.set_state(RecipeCreateWizard.instructions_en)
-    text: str = t("admin_wizard_instructions_en", locale=locale)
-    keyboard = get_admin_cancel_keyboard(locale=locale)
-
-    await message.answer(
-        text=text,
-        reply_markup=keyboard,
-    )
-
-
-@admin_router.message(RecipeCreateWizard.instructions_en)
-async def handle_wizard_instructions_en(
-    message: Message,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    instructions_en: str = (message.text or "").strip()
-    if not instructions_en:
-        return
-
-    await state.update_data(instructions_en=instructions_en)
-    await state.set_state(RecipeCreateWizard.instructions_ru)
-    text: str = t("admin_wizard_instructions_ru", locale=locale)
-    keyboard = get_admin_cancel_keyboard(locale=locale)
-
-    await message.answer(
-        text=text,
-        reply_markup=keyboard,
-    )
-
-
-@admin_router.message(RecipeCreateWizard.instructions_ru)
-async def handle_wizard_instructions_ru(
-    message: Message,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    instructions_ru: str = (message.text or "").strip()
-    if not instructions_ru:
-        return
-
-    await state.update_data(instructions_ru=instructions_ru)
+    await state.update_data(instructions=instructions_text)
     await state.set_state(RecipeCreateWizard.photo)
     text: str = t("admin_wizard_photo", locale=locale)
     keyboard = get_admin_skip_cancel_keyboard(
@@ -551,9 +497,7 @@ async def handle_wizard_skip_pdf(
         recipe_service=recipe_service,
         state=state,
     )
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     text: str = t("admin_recipe_created", locale=locale, title=title)
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
@@ -586,9 +530,7 @@ async def handle_wizard_pdf_message(
         recipe_service=recipe_service,
         state=state,
     )
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     text: str = t("admin_recipe_created", locale=locale, title=title)
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
@@ -651,9 +593,7 @@ async def handle_template_message(
     )
     await state.clear()
 
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     text: str = t("admin_recipe_created", locale=locale, title=title)
     keyboard = get_admin_dashboard_keyboard(locale=locale)
 
@@ -690,9 +630,7 @@ async def handle_edit_recipe_callback(
     await state.set_state(RecipeEditWizard.select_field)
     await state.update_data(recipe_id=recipe_id)
 
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     text: str = t("admin_edit_select_field", locale=locale, title=title)
     keyboard = get_admin_edit_recipe_keyboard(
         recipe_id=recipe.id,
@@ -836,9 +774,9 @@ async def handle_edit_ingredients_callback(
 
 
 @admin_router.callback_query(
-    AdminActionCallback.filter(F.action == "edit_instructions_en"),
+    AdminActionCallback.filter(F.action == "edit_instructions"),
 )
-async def handle_edit_instructions_en_callback(
+async def handle_edit_instructions_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
     state: FSMContext,
@@ -846,32 +784,8 @@ async def handle_edit_instructions_en_callback(
 ) -> None:
     if callback_data.target_id is not None:
         await state.update_data(recipe_id=callback_data.target_id)
-    await state.set_state(RecipeEditWizard.instructions_en)
-    text: str = t("admin_edit_prompt_instructions_en", locale=locale)
-    keyboard = get_admin_cancel_keyboard(locale=locale)
-
-    if callback.message is not None:
-        await _edit_or_resend_message(
-            message=callback.message,
-            text=text,
-            reply_markup=keyboard,
-        )
-    await callback.answer()
-
-
-@admin_router.callback_query(
-    AdminActionCallback.filter(F.action == "edit_instructions_ru"),
-)
-async def handle_edit_instructions_ru_callback(
-    callback: CallbackQuery,
-    callback_data: AdminActionCallback,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    if callback_data.target_id is not None:
-        await state.update_data(recipe_id=callback_data.target_id)
-    await state.set_state(RecipeEditWizard.instructions_ru)
-    text: str = t("admin_edit_prompt_instructions_ru", locale=locale)
+    await state.set_state(RecipeEditWizard.instructions)
+    text: str = t("admin_edit_prompt_instructions", locale=locale)
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
@@ -924,16 +838,18 @@ async def handle_edit_title_en_input(
         await state.clear()
         return
 
+    existing: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
+    title_dict: dict[str, str] = existing.title.copy() if existing else {}
+    title_dict["en"] = title_en
+
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
-        dto=RecipeUpdateDTO(title_en=title_en),
+        dto=RecipeUpdateDTO(title=title_dict),
     )
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else title_en)
+        html.escape(get_localized_text(updated.title, locale)) if updated else title_en
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -964,16 +880,18 @@ async def handle_edit_title_ru_input(
         await state.clear()
         return
 
+    existing: RecipeDTO | None = await recipe_service.get_recipe(recipe_id)
+    title_dict: dict[str, str] = existing.title.copy() if existing else {}
+    title_dict["ru"] = title_ru
+
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
-        dto=RecipeUpdateDTO(title_ru=title_ru),
+        dto=RecipeUpdateDTO(title=title_dict),
     )
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else title_ru)
+        html.escape(get_localized_text(updated.title, locale)) if updated else title_ru
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1013,9 +931,7 @@ async def handle_edit_category_select(
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
+        html.escape(get_localized_text(updated.title, locale)) if updated else ""
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1064,9 +980,7 @@ async def handle_edit_prep_time_input(
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
+        html.escape(get_localized_text(updated.title, locale)) if updated else ""
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1097,20 +1011,9 @@ async def handle_edit_ingredients_input(
         await state.clear()
         return
 
-    lines: list[str] = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    ingredients: list[IngredientCreateDTO] = []
-    for line in lines:
-        name, qty, unit = RecipeService.parse_ingredient_line(line)
-        if name:
-            ingredients.append(
-                IngredientCreateDTO(
-                    name_en=name,
-                    name_ru=name,
-                    quantity=qty,
-                    unit=unit,
-                ),
-            )
-
+    ingredients: list[IngredientCreateDTO] = _parse_wizard_ingredients(
+        raw_text,
+    )
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
         dto=RecipeUpdateDTO(ingredients=ingredients),
@@ -1118,9 +1021,7 @@ async def handle_edit_ingredients_input(
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
+        html.escape(get_localized_text(updated.title, locale)) if updated else ""
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1134,15 +1035,15 @@ async def handle_edit_ingredients_input(
     )
 
 
-@admin_router.message(RecipeEditWizard.instructions_en)
-async def handle_edit_instructions_en_input(
+@admin_router.message(RecipeEditWizard.instructions)
+async def handle_edit_instructions_input(
     message: Message,
     recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    instructions_en: str = (message.text or "").strip()
-    if not instructions_en:
+    instructions_text: str = (message.text or "").strip()
+    if not instructions_text:
         return
 
     data = await state.get_data()
@@ -1153,54 +1054,12 @@ async def handle_edit_instructions_en_input(
 
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
-        dto=RecipeUpdateDTO(instructions_en=instructions_en),
+        dto=RecipeUpdateDTO(instructions=instructions_text),
     )
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
-    )
-    text: str = t("admin_recipe_updated", locale=locale, title=title)
-    keyboard = get_admin_recipe_actions_keyboard(
-        recipe_id=recipe_id,
-        locale=locale,
-    )
-
-    await message.answer(
-        text=text,
-        reply_markup=keyboard,
-    )
-
-
-@admin_router.message(RecipeEditWizard.instructions_ru)
-async def handle_edit_instructions_ru_input(
-    message: Message,
-    recipe_service: RecipeService,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    instructions_ru: str = (message.text or "").strip()
-    if not instructions_ru:
-        return
-
-    data = await state.get_data()
-    recipe_id: int | None = data.get("recipe_id")
-    if recipe_id is None:
-        await state.clear()
-        return
-
-    updated: RecipeDTO | None = await recipe_service.update_recipe(
-        recipe_id=recipe_id,
-        dto=RecipeUpdateDTO(instructions_ru=instructions_ru),
-    )
-    await state.clear()
-
-    title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
+        html.escape(get_localized_text(updated.title, locale)) if updated else ""
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1261,9 +1120,7 @@ async def handle_edit_media_input(
     await state.clear()
 
     title: str = (
-        updated.title_ru
-        if updated and locale == "ru" and updated.title_ru
-        else (updated.title_en if updated else "")
+        html.escape(get_localized_text(updated.title, locale)) if updated else ""
     )
     text: str = t("admin_recipe_updated", locale=locale, title=title)
     keyboard = get_admin_recipe_actions_keyboard(
@@ -1299,9 +1156,7 @@ async def handle_delete_recipe_callback(
         )
         return
 
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     text: str = t("admin_recipe_delete_confirm", locale=locale, title=title)
     keyboard = get_admin_delete_confirm_keyboard(
         recipe_id=recipe.id,
@@ -1373,16 +1228,21 @@ async def handle_manage_categories_command(
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
-    text: str = "📁 " + (
-        "Управление категориями" if locale == "ru" else "Category Management"
-    )
+    cat_mgmt_title: str
+    if locale == "ru":
+        cat_mgmt_title = "📁 Управление категориями"
+    elif locale == "es":
+        cat_mgmt_title = "📁 Gestión de Categorías"
+    else:
+        cat_mgmt_title = "📁 Category Management"
+
     keyboard = get_admin_categories_keyboard(
         categories=categories,
         locale=locale,
     )
 
     await message.answer(
-        text=text,
+        text=cat_mgmt_title,
         reply_markup=keyboard,
     )
 
@@ -1401,9 +1261,14 @@ async def handle_manage_categories_callback(
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
-    text: str = "📁 " + (
-        "Управление категориями" if locale == "ru" else "Category Management"
-    )
+    cat_mgmt_title: str
+    if locale == "ru":
+        cat_mgmt_title = "📁 Управление категориями"
+    elif locale == "es":
+        cat_mgmt_title = "📁 Gestión de Categorías"
+    else:
+        cat_mgmt_title = "📁 Category Management"
+
     keyboard = get_admin_categories_keyboard(
         categories=categories,
         locale=locale,
@@ -1412,7 +1277,7 @@ async def handle_manage_categories_callback(
     if callback.message is not None:
         await _edit_or_resend_message(
             message=callback.message,
-            text=text,
+            text=cat_mgmt_title,
             reply_markup=keyboard,
         )
     await callback.answer()
@@ -1439,8 +1304,8 @@ async def handle_category_detail_callback(
         await callback.answer(text="Category not found", show_alert=True)
         return
 
-    name: str = category.name_ru if locale == "ru" else category.name_en
-    text: str = f"📁 *{name}* (`{category.slug}`)\nID: {category.id}"
+    name: str = html.escape(get_localized_text(category.name, locale))
+    text: str = f"📁 <b>{name}</b> (<code>{category.slug}</code>)\nID: {category.id}"
     keyboard = get_admin_category_detail_keyboard(
         category_id=category.id,
         locale=locale,
@@ -1470,9 +1335,15 @@ async def handle_delete_category_callback(
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 
-    text: str = f"{t('admin_category_deleted', locale=locale)}\n\n📁 " + (
-        "Управление категориями" if locale == "ru" else "Category Management"
-    )
+    cat_mgmt_title: str
+    if locale == "ru":
+        cat_mgmt_title = "📁 Управление категориями"
+    elif locale == "es":
+        cat_mgmt_title = "📁 Gestión de Categorías"
+    else:
+        cat_mgmt_title = "📁 Category Management"
+
+    text: str = f"{t('admin_category_deleted', locale=locale)}\n\n{cat_mgmt_title}"
     keyboard = get_admin_categories_keyboard(
         categories=categories,
         locale=locale,
@@ -1496,8 +1367,8 @@ async def handle_add_category_callback(
     locale: str = DEFAULT_LOCALE,
 ) -> None:
     await state.clear()
-    await state.set_state(CategoryCreateWizard.name_en)
-    text: str = t("admin_category_prompt_name_en", locale=locale)
+    await state.set_state(CategoryCreateWizard.name)
+    text: str = t("admin_category_prompt_name", locale=locale)
     keyboard = get_admin_cancel_keyboard(locale=locale)
 
     if callback.message is not None:
@@ -1509,39 +1380,18 @@ async def handle_add_category_callback(
     await callback.answer()
 
 
-@admin_router.message(CategoryCreateWizard.name_en)
-async def handle_category_name_en(
-    message: Message,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    name_en: str = (message.text or "").strip()
-    if not name_en:
-        return
-
-    await state.update_data(name_en=name_en)
-    await state.set_state(CategoryCreateWizard.name_ru)
-    text: str = t("admin_category_prompt_name_ru", locale=locale)
-    keyboard = get_admin_cancel_keyboard(locale=locale)
-
-    await message.answer(
-        text=text,
-        reply_markup=keyboard,
-    )
-
-
-@admin_router.message(CategoryCreateWizard.name_ru)
-async def handle_category_name_ru(
+@admin_router.message(CategoryCreateWizard.name)
+async def handle_category_name(
     message: Message,
     category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    name_ru: str = (message.text or "").strip()
-    if not name_ru:
+    name: str = (message.text or "").strip()
+    if not name:
         return
 
-    await state.update_data(name_ru=name_ru)
+    await state.update_data(name=name)
     await state.set_state(CategoryCreateWizard.parent_id)
 
     top_categories: list[
@@ -1578,27 +1428,34 @@ async def handle_category_parent_select(
         else None
     )
     data = await state.get_data()
-    name_en: str = data.get("name_en", "")
-    name_ru: str = data.get("name_ru", "")
+    name: str = data.get("name", "")
 
-    slug: str = re.sub(r"[^a-zA-Z0-9]+", "_", name_en.lower()).strip("_")
+    slug: str = re.sub(r"[^a-zA-Z0-9]+", "_", name.lower()).strip("_")
     if not slug:
         slug = f"cat_{int(datetime.now(UTC).timestamp())}"
 
     dto = CategoryCreateDTO(
         slug=slug,
-        name_en=name_en,
-        name_ru=name_ru,
+        name={"en": name},
         parent_id=parent_id,
     )
     new_cat: CategoryDTO = await category_service.create_category(dto)
     await state.clear()
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()
-    cat_name: str = new_cat.name_ru if locale == "ru" else new_cat.name_en
+    cat_name: str = html.escape(get_localized_text(new_cat.name, locale))
+
+    cat_mgmt_title: str
+    if locale == "ru":
+        cat_mgmt_title = "📁 Управление категориями"
+    elif locale == "es":
+        cat_mgmt_title = "📁 Gestión de Categorías"
+    else:
+        cat_mgmt_title = "📁 Category Management"
+
     text: str = (
-        f"{t('admin_category_created', locale=locale, name=cat_name)}\n\n📁 "
-        + ("Управление категориями" if locale == "ru" else "Category Management")
+        f"{t('admin_category_created', locale=locale, name=cat_name)}\n\n"
+        f"{cat_mgmt_title}"
     )
     keyboard = get_admin_categories_keyboard(
         categories=categories,

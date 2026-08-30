@@ -66,7 +66,7 @@ class RecipeService:
 
     async def list_by_category(
         self,
-        category_id: int,
+        category_id: int | None = None,
         sort_order: SortOrder = SortOrder.DATE_ADDED,
         pagination: PaginationParams | None = None,
         include_subcategories: bool = True,
@@ -88,7 +88,7 @@ class RecipeService:
 
     async def search_in_category(
         self,
-        category_id: int,
+        category_id: int | None,
         query_text: str,
         sort_order: SortOrder = SortOrder.DATE_ADDED,
         pagination: PaginationParams | None = None,
@@ -154,18 +154,27 @@ class RecipeService:
         if category_id is None:
             raise ValueError("A valid category_id or category_slug is required")
 
-        title_en: str = parsed.title_en or parsed.title_ru or ""
-        title_ru: str = parsed.title_ru or parsed.title_en or ""
-        instructions_en: str = parsed.instructions_en or parsed.instructions_ru or ""
-        instructions_ru: str = parsed.instructions_ru or parsed.instructions_en or ""
+        title: dict[str, str] = parsed.title.copy() if parsed.title else {}
+        if parsed.title_en and "en" not in title:
+            title["en"] = parsed.title_en
+        if parsed.title_ru and "ru" not in title:
+            title["ru"] = parsed.title_ru
+
+        if not title:
+            raise ValueError("Recipe title is required")
+
+        instructions: str = (
+            parsed.instructions
+            or parsed.instructions_en
+            or parsed.instructions_ru
+            or ""
+        )
 
         dto = RecipeCreateDTO(
             category_id=category_id,
-            title_en=title_en,
-            title_ru=title_ru,
+            title=title,
             prep_time_minutes=parsed.prep_time_minutes,
-            instructions_en=instructions_en,
-            instructions_ru=instructions_ru,
+            instructions=instructions,
             source_url=parsed.source_url,
             instagram_url=parsed.instagram_url,
             ingredients=parsed.ingredients,
@@ -265,14 +274,13 @@ class RecipeService:
         if not lines:
             return None
 
+        title_dict: dict[str, str] = {}
         title_en: str | None = None
         title_ru: str | None = None
         category_slug: str | None = None
         prep_time_minutes: int = 0
-        instructions_en_lines: list[str] = []
-        instructions_ru_lines: list[str] = []
-        ingredients_en_raw: list[str] = []
-        ingredients_ru_raw: list[str] = []
+        instructions_lines: list[str] = []
+        ingredients_raw: list[str] = []
         source_url: str | None = None
         instagram_url: str | None = None
 
@@ -284,9 +292,19 @@ class RecipeService:
             if lower_line.startswith(("title (en):", "title en:")):
                 current_section = None
                 title_en = line.split(":", 1)[1].strip()
+                title_dict["en"] = title_en
             elif lower_line.startswith(("title (ru):", "title ru:")):
                 current_section = None
                 title_ru = line.split(":", 1)[1].strip()
+                title_dict["ru"] = title_ru
+            elif lower_line.startswith(("title (es):", "title es:")):
+                current_section = None
+                title_dict["es"] = line.split(":", 1)[1].strip()
+            elif lower_line.startswith("title:"):
+                current_section = None
+                generic_title = line.split(":", 1)[1].strip()
+                title_dict["en"] = generic_title
+                title_dict["ru"] = generic_title
             elif lower_line.startswith("category:"):
                 current_section = None
                 category_slug = line.split(":", 1)[1].strip()
@@ -302,85 +320,66 @@ class RecipeService:
             elif lower_line.startswith(("instagram url:", "instagram:")):
                 current_section = None
                 instagram_url = line.split(":", 1)[1].strip()
-            elif (
-                lower_line.startswith(("ingredients (en):", "ingredients en:"))
-                or lower_line == "ingredients (en)"
-            ):
-                current_section = "ingredients_en"
-            elif (
-                lower_line.startswith(("ingredients (ru):", "ingredients ru:"))
-                or lower_line == "ingredients (ru)"
-            ):
-                current_section = "ingredients_ru"
-            elif (
-                lower_line.startswith(
-                    ("instructions (en):", "instructions en:"),
-                )
-                or lower_line == "instructions (en)"
-            ):
-                current_section = "instructions_en"
-            elif (
-                lower_line.startswith(
-                    ("instructions (ru):", "instructions ru:"),
-                )
-                or lower_line == "instructions (ru)"
-            ):
-                current_section = "instructions_ru"
+            elif lower_line.startswith(
+                (
+                    "ingredients:",
+                    "ingredients (en):",
+                    "ingredients en:",
+                    "ingredients (ru):",
+                    "ingredients ru:",
+                ),
+            ) or lower_line in [
+                "ingredients",
+                "ingredients (en)",
+                "ingredients (ru)",
+            ]:
+                current_section = "ingredients"
+            elif lower_line.startswith(
+                (
+                    "instructions:",
+                    "instructions (en):",
+                    "instructions en:",
+                    "instructions (ru):",
+                    "instructions ru:",
+                ),
+            ) or lower_line in [
+                "instructions",
+                "instructions (en)",
+                "instructions (ru)",
+            ]:
+                current_section = "instructions"
             else:
-                if current_section == "ingredients_en":
-                    ingredients_en_raw.append(line)
-                elif current_section == "ingredients_ru":
-                    ingredients_ru_raw.append(line)
-                elif current_section == "instructions_en":
-                    instructions_en_lines.append(line)
-                elif current_section == "instructions_ru":
-                    instructions_ru_lines.append(line)
+                if current_section == "ingredients":
+                    ingredients_raw.append(line)
+                elif current_section == "instructions":
+                    instructions_lines.append(line)
 
         ingredients_dtos: list[IngredientCreateDTO] = []
-        max_ing_len: int = max(
-            len(ingredients_en_raw),
-            len(ingredients_ru_raw),
-        )
-
-        for i in range(max_ing_len):
-            en_line: str = ingredients_en_raw[i] if i < len(ingredients_en_raw) else ""
-            ru_line: str = ingredients_ru_raw[i] if i < len(ingredients_ru_raw) else ""
-
-            name_en, qty_en, unit_en = cls.parse_ingredient_line(en_line)
-            name_ru, qty_ru, unit_ru = cls.parse_ingredient_line(ru_line)
-
-            final_name_en: str = name_en or name_ru
-            final_name_ru: str = name_ru or name_en
-            final_qty: float | None = qty_en if qty_en is not None else qty_ru
-            final_unit: str | None = unit_en if unit_en is not None else unit_ru
-
-            if final_name_en or final_name_ru:
+        for ing_line in ingredients_raw:
+            name, qty, unit = cls.parse_ingredient_line(ing_line)
+            if name:
                 ingredients_dtos.append(
                     IngredientCreateDTO(
-                        name_en=final_name_en,
-                        name_ru=final_name_ru,
-                        quantity=final_qty,
-                        unit=final_unit,
+                        name=name,
+                        quantity=qty,
+                        unit=unit,
                     ),
                 )
 
-        instructions_en: str | None = (
-            "\n".join(instructions_en_lines) if instructions_en_lines else None
-        )
-        instructions_ru: str | None = (
-            "\n".join(instructions_ru_lines) if instructions_ru_lines else None
+        instructions_str: str | None = (
+            "\n".join(instructions_lines) if instructions_lines else None
         )
 
-        if not title_en and not title_ru:
+        if not title_dict and not title_en and not title_ru:
             return None
 
         return ParsedRecipeTemplateDTO(
+            title=title_dict,
             title_en=title_en,
             title_ru=title_ru,
             category_slug=category_slug,
             prep_time_minutes=prep_time_minutes,
-            instructions_en=instructions_en,
-            instructions_ru=instructions_ru,
+            instructions=instructions_str,
             source_url=source_url,
             instagram_url=instagram_url,
             ingredients=ingredients_dtos,

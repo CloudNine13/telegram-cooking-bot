@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.i18n.helpers import get_localized_text
 from app.schemas.recipe import RecipeDTO
 
 
@@ -122,24 +123,19 @@ class PdfExportService:
         temp_html_path: Path = self.temp_base_dir / f"recipe_{unique_id}.html"
         output_pdf_path: Path = self.temp_base_dir / f"recipe_{unique_id}.pdf"
 
-        title: str = (
-            recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-        )
+        title: str = get_localized_text(recipe.title, locale=locale)
         category_name: str = ""
         if recipe.category is not None:
-            category_name = (
-                recipe.category.name_ru if locale == "ru" else recipe.category.name_en
+            category_name = get_localized_text(
+                recipe.category.name,
+                locale=locale,
             )
 
-        instructions: str = (
-            recipe.instructions_ru
-            if locale == "ru" and recipe.instructions_ru
-            else recipe.instructions_en
-        )
+        instructions: str = recipe.instructions
 
         ingredients_html_list: list[str] = []
         for ing in recipe.ingredients:
-            name: str = ing.name_ru if locale == "ru" and ing.name_ru else ing.name_en
+            name: str = ing.name
             amount_parts: list[str] = []
             if ing.quantity is not None:
                 amount_parts.append(str(ing.quantity))
@@ -152,13 +148,30 @@ class PdfExportService:
         ingredients_html: str = "".join(ingredients_html_list)
         instructions_formatted: str = instructions.replace("\n", "<br/>")
 
-        ingredients_heading: str = "Ингредиенты" if locale == "ru" else "Ingredients"
-        instructions_heading: str = (
-            "Инструкция по приготовлению" if locale == "ru" else "Instructions"
-        )
-        prep_time_label: str = "Время приготовления" if locale == "ru" else "Prep Time"
-        category_label: str = "Категория" if locale == "ru" else "Category"
-        minutes_unit: str = "мин" if locale == "ru" else "min"
+        ingredients_heading: str
+        instructions_heading: str
+        prep_time_label: str
+        category_label: str
+        minutes_unit: str
+
+        if locale == "ru":
+            ingredients_heading = "Ингредиенты"
+            instructions_heading = "Инструкция по приготовлению"
+            prep_time_label = "Время приготовления"
+            category_label = "Категория"
+            minutes_unit = "мин"
+        elif locale == "es":
+            ingredients_heading = "Ingredientes"
+            instructions_heading = "Instrucciones de preparación"
+            prep_time_label = "Tiempo de preparación"
+            category_label = "Categoría"
+            minutes_unit = "min"
+        else:
+            ingredients_heading = "Ingredients"
+            instructions_heading = "Instructions"
+            prep_time_label = "Prep Time"
+            category_label = "Category"
+            minutes_unit = "min"
 
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -224,7 +237,11 @@ li {{
             def _write_temp_html(path: Path, content: str) -> None:
                 path.write_text(content, encoding="utf-8")
 
-            await asyncio.to_thread(_write_temp_html, temp_html_path, html_content)
+            await asyncio.to_thread(
+                _write_temp_html,
+                temp_html_path,
+                html_content,
+            )
 
             cmd = [
                 chrome_path,

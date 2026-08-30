@@ -6,6 +6,7 @@ from app.bot.keyboards.callbacks import (
     PaginationCallback,
     RecipeViewCallback,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.recipe import RecipeDTO
@@ -20,7 +21,7 @@ def get_favorites_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for recipe in recipes:
-        title: str = recipe.title_ru if locale == "ru" else recipe.title_en
+        title: str = get_localized_text(recipe.title, locale=locale)
         builder.row(
             InlineKeyboardButton(
                 text=title,

@@ -5,6 +5,7 @@ from app.bot.keyboards.callbacks import (
     AdminActionCallback,
     MainMenuCallback,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.category import CategoryDTO
@@ -123,19 +124,10 @@ def get_admin_edit_recipe_keyboard(
                 target_id=recipe_id,
             ).pack(),
         ),
-    )
-    builder.row(
         InlineKeyboardButton(
-            text=t("btn_edit_instructions_en", locale=locale),
+            text=t("btn_edit_instructions", locale=locale),
             callback_data=AdminActionCallback(
-                action="edit_instructions_en",
-                target_id=recipe_id,
-            ).pack(),
-        ),
-        InlineKeyboardButton(
-            text=t("btn_edit_instructions_ru", locale=locale),
-            callback_data=AdminActionCallback(
-                action="edit_instructions_ru",
+                action="edit_instructions",
                 target_id=recipe_id,
             ).pack(),
         ),
@@ -192,7 +184,7 @@ def get_admin_categories_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for category in categories:
-        name: str = category.name_ru if locale == "ru" else category.name_en
+        name: str = get_localized_text(category.name, locale=locale)
         builder.button(
             text=name,
             callback_data=AdminActionCallback(
@@ -203,9 +195,17 @@ def get_admin_categories_keyboard(
 
     builder.adjust(2)
 
+    add_cat_label: str
+    if locale == "ru":
+        add_cat_label = "➕ Добавить категорию"
+    elif locale == "es":
+        add_cat_label = "➕ Añadir Categoría"
+    else:
+        add_cat_label = "➕ Add Category"
+
     builder.row(
         InlineKeyboardButton(
-            text="➕ " + ("Добавить категорию" if locale == "ru" else "Add Category"),
+            text=add_cat_label,
             callback_data=AdminActionCallback(action="add_category").pack(),
         ),
     )
@@ -225,9 +225,17 @@ def get_admin_category_detail_keyboard(
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
+    del_cat_label: str
+    if locale == "ru":
+        del_cat_label = "🗑️ Удалить категорию"
+    elif locale == "es":
+        del_cat_label = "🗑️ Eliminar Categoría"
+    else:
+        del_cat_label = "🗑️ Delete Category"
+
     builder.row(
         InlineKeyboardButton(
-            text="🗑️ " + ("Удалить категорию" if locale == "ru" else "Delete Category"),
+            text=del_cat_label,
             callback_data=AdminActionCallback(
                 action="delete_category",
                 target_id=category_id,
@@ -254,9 +262,14 @@ def get_admin_category_select_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     if include_none:
-        none_label: str = (
-            "🔝 Верхний уровень (Нет)" if locale == "ru" else "🔝 Top-level (None)"
-        )
+        none_label: str
+        if locale == "ru":
+            none_label = "🔝 Верхний уровень (Нет)"
+        elif locale == "es":
+            none_label = "🔝 Nivel superior (Ninguna)"
+        else:
+            none_label = "🔝 Top-level (None)"
+
         builder.row(
             InlineKeyboardButton(
                 text=none_label,
@@ -268,7 +281,7 @@ def get_admin_category_select_keyboard(
         )
 
     for category in categories:
-        name: str = category.name_ru if locale == "ru" else category.name_en
+        name: str = get_localized_text(category.name, locale=locale)
         builder.button(
             text=name,
             callback_data=AdminActionCallback(

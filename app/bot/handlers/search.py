@@ -1,3 +1,5 @@
+import html
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
@@ -16,6 +18,7 @@ from app.bot.keyboards.common import (
 )
 from app.bot.keyboards.fridge import get_fridge_match_results_keyboard
 from app.bot.states.search import CategorySearchState, GlobalSearchState
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.category import CategoryDTO
@@ -146,12 +149,18 @@ async def handle_category_search_callback(
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category: CategoryDTO | None = await category_service.get_category_by_id(
-        callback_data.category_id,
-    )
-    cat_name: str = ""
-    if category is not None:
-        cat_name = category.name_ru if locale == "ru" else category.name_en
+    cat_name: str
+    if callback_data.category_id == 0:
+        cat_name = t("cat_all", locale=locale)
+    else:
+        category: CategoryDTO | None = await category_service.get_category_by_id(
+            callback_data.category_id,
+        )
+        cat_name = (
+            get_localized_text(category.name, locale=locale)
+            if category is not None
+            else ""
+        )
 
     await state.set_state(CategorySearchState.waiting_for_query)
     await state.update_data(
@@ -162,7 +171,7 @@ async def handle_category_search_callback(
     text: str = t(
         "search_in_category_prompt",
         locale=locale,
-        category=cat_name,
+        category=html.escape(cat_name),
     )
     keyboard = get_cancel_keyboard(locale=locale, target="search")
 
@@ -190,11 +199,19 @@ async def handle_category_search_query(
         await state.clear()
         return
 
-    paginated: PaginatedResponse[RecipeDTO] = await recipe_service.search_in_category(
-        category_id=category_id,
-        query_text=query_text,
-        pagination=PaginationParams(page=1, page_size=5),
-    )
+    paginated: PaginatedResponse[RecipeDTO]
+
+    if category_id == 0:
+        paginated = await recipe_service.search_global(
+            query_text=query_text,
+            pagination=PaginationParams(page=1, page_size=5),
+        )
+    else:
+        paginated = await recipe_service.search_in_category(
+            category_id=category_id,
+            query_text=query_text,
+            pagination=PaginationParams(page=1, page_size=5),
+        )
 
     await state.update_data(
         query_text=query_text,
@@ -202,9 +219,11 @@ async def handle_category_search_query(
         category_id=category_id,
     )
 
+    query_escaped: str = html.escape(query_text)
+
     if paginated.total_count == 0:
         await message.answer(
-            text=t("search_no_results", locale=locale, query=query_text),
+            text=t("search_no_results", locale=locale, query=query_escaped),
             reply_markup=get_cancel_keyboard(locale=locale, target="search"),
         )
         return
@@ -213,7 +232,7 @@ async def handle_category_search_query(
         "search_results",
         locale=locale,
         count=paginated.total_count,
-        query=query_text,
+        query=query_escaped,
     )
     keyboard = get_search_results_keyboard(
         recipes=paginated.items,
@@ -250,9 +269,11 @@ async def handle_global_search_query(
         search_type="global",
     )
 
+    query_escaped: str = html.escape(query_text)
+
     if paginated.total_count == 0:
         await message.answer(
-            text=t("search_no_results", locale=locale, query=query_text),
+            text=t("search_no_results", locale=locale, query=query_escaped),
             reply_markup=get_cancel_keyboard(locale=locale, target="search"),
         )
         return
@@ -261,7 +282,7 @@ async def handle_global_search_query(
         "search_results",
         locale=locale,
         count=paginated.total_count,
-        query=query_text,
+        query=query_escaped,
     )
     keyboard = get_search_results_keyboard(
         recipes=paginated.items,
@@ -340,7 +361,7 @@ async def handle_search_pagination(
 
     paginated: PaginatedResponse[RecipeDTO]
 
-    if search_type == "category" and category_id is not None:
+    if search_type == "category" and category_id is not None and category_id != 0:
         paginated = await recipe_service.search_in_category(
             category_id=category_id,
             query_text=query_text,
@@ -358,11 +379,12 @@ async def handle_search_pagination(
             ),
         )
 
+    query_escaped: str = html.escape(query_text)
     results_text: str = t(
         "search_results",
         locale=locale,
         count=paginated.total_count,
-        query=query_text,
+        query=query_escaped,
     )
     keyboard = get_search_results_keyboard(
         recipes=paginated.items,

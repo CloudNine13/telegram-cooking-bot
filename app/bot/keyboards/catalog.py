@@ -12,6 +12,7 @@ from app.bot.keyboards.callbacks import (
     RecipeViewCallback,
     SortToggleCallback,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.schemas.category import CategoryDTO
@@ -25,8 +26,19 @@ def get_top_categories_keyboard(
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_all_recipes", locale=locale),
+            callback_data=CatalogNavCallback(
+                category_id=0,
+                page=1,
+                sort_order=SortOrder.DATE_ADDED,
+            ).pack(),
+        ),
+    )
+
     for category in categories:
-        name: str = category.name_ru if locale == "ru" else category.name_en
+        name: str = get_localized_text(category.name, locale=locale)
         builder.button(
             text=name,
             callback_data=CatalogNavCallback(
@@ -36,7 +48,7 @@ def get_top_categories_keyboard(
             ).pack(),
         )
 
-    builder.adjust(2)
+    builder.adjust(1, 2)
 
     builder.row(
         InlineKeyboardButton(
@@ -56,7 +68,7 @@ def get_subcategories_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for subcategory in subcategories:
-        name: str = subcategory.name_ru if locale == "ru" else subcategory.name_en
+        name: str = get_localized_text(subcategory.name, locale=locale)
         builder.button(
             text=name,
             callback_data=CatalogNavCallback(
@@ -95,7 +107,7 @@ def get_recipes_list_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for recipe in recipes:
-        title: str = recipe.title_ru if locale == "ru" else recipe.title_en
+        title: str = get_localized_text(recipe.title, locale=locale)
         builder.row(
             InlineKeyboardButton(
                 text=title,
@@ -328,7 +340,7 @@ def get_search_results_keyboard(
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
     for recipe in recipes:
-        title: str = recipe.title_ru if locale == "ru" else recipe.title_en
+        title: str = get_localized_text(recipe.title, locale=locale)
         builder.row(
             InlineKeyboardButton(
                 text=title,

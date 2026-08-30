@@ -55,34 +55,38 @@ class RecipeRepo(BaseRepo):
 
     async def list_by_category(
         self,
-        category_id: int,
+        category_id: int | None = None,
         sort_order: SortOrder = SortOrder.DATE_ADDED,
         pagination: PaginationParams | None = None,
         include_subcategories: bool = True,
     ) -> tuple[list[Recipe], int]:
-        category_ids: list[int] = await self._resolve_category_ids(
-            category_id,
-            include_subcategories,
-        )
+        where_clause = None
 
-        count_stmt = (
-            select(func.count())
-            .select_from(Recipe)
-            .where(Recipe.category_id.in_(category_ids))
-        )
+        if category_id is not None and category_id != 0:
+            category_ids: list[int] = await self._resolve_category_ids(
+                category_id,
+                include_subcategories,
+            )
+            where_clause = Recipe.category_id.in_(category_ids)
+
+        count_stmt = select(func.count()).select_from(Recipe)
+        if where_clause is not None:
+            count_stmt = count_stmt.where(where_clause)
+
         total_count: int | None = await self.session.scalar(count_stmt)
 
-        stmt = (
-            select(Recipe)
-            .where(Recipe.category_id.in_(category_ids))
-            .options(
-                selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
-            )
+        stmt = select(Recipe).options(
+            selectinload(Recipe.ingredients),
+            joinedload(Recipe.category),
         )
+        if where_clause is not None:
+            stmt = stmt.where(where_clause)
 
         if sort_order == SortOrder.ALPHABETICAL:
-            stmt = stmt.order_by(Recipe.title_en.asc(), Recipe.id.asc())
+            stmt = stmt.order_by(
+                func.coalesce(Recipe.title.op("->>")("en"), "").asc(),
+                Recipe.id.asc(),
+            )
         else:
             stmt = stmt.order_by(Recipe.created_at.desc(), Recipe.id.desc())
 
@@ -96,26 +100,52 @@ class RecipeRepo(BaseRepo):
 
     async def search_in_category(
         self,
-        category_id: int,
+        category_id: int | None,
         query_text: str,
         sort_order: SortOrder = SortOrder.DATE_ADDED,
         pagination: PaginationParams | None = None,
         include_subcategories: bool = True,
     ) -> tuple[list[Recipe], int]:
-        category_ids: list[int] = await self._resolve_category_ids(
-            category_id,
-            include_subcategories,
+        sim_en = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("en"), ""),
+            query_text,
         )
-        search_filter = or_(
-            Recipe.title_en.ilike(f"%{query_text}%"),
-            Recipe.title_ru.ilike(f"%{query_text}%"),
+        sim_ru = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("ru"), ""),
+            query_text,
         )
-        where_clause = and_(
-            Recipe.category_id.in_(category_ids),
-            search_filter,
+        sim_es = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("es"), ""),
+            query_text,
         )
+        max_sim = func.greatest(sim_en, sim_ru, sim_es)
 
-        count_stmt = select(func.count()).select_from(Recipe).where(where_clause)
+        ilike_condition = or_(
+            Recipe.title.op("->>")("en").ilike(f"%{query_text}%"),
+            Recipe.title.op("->>")("ru").ilike(f"%{query_text}%"),
+            Recipe.title.op("->>")("es").ilike(f"%{query_text}%"),
+        )
+        title_search_filter = or_(max_sim >= 0.25, ilike_condition)
+
+        where_clause = title_search_filter
+
+        if category_id is not None and category_id != 0:
+            category_ids: list[int] = await self._resolve_category_ids(
+                category_id,
+                include_subcategories,
+            )
+            where_clause = and_(
+                Recipe.category_id.in_(category_ids),
+                title_search_filter,
+            )
+
+        count_stmt = (
+            select(func.count())
+            .select_from(Recipe)
+            .where(
+                where_clause,
+            )
+        )
         total_count: int | None = await self.session.scalar(count_stmt)
 
         stmt = (
@@ -128,9 +158,12 @@ class RecipeRepo(BaseRepo):
         )
 
         if sort_order == SortOrder.ALPHABETICAL:
-            stmt = stmt.order_by(Recipe.title_en.asc(), Recipe.id.asc())
+            stmt = stmt.order_by(
+                func.coalesce(Recipe.title.op("->>")("en"), "").asc(),
+                Recipe.id.asc(),
+            )
         else:
-            stmt = stmt.order_by(Recipe.created_at.desc(), Recipe.id.desc())
+            stmt = stmt.order_by(max_sim.desc(), Recipe.id.desc())
 
         if pagination is not None:
             stmt = stmt.offset(pagination.offset).limit(pagination.page_size)
@@ -146,21 +179,43 @@ class RecipeRepo(BaseRepo):
         sort_order: SortOrder = SortOrder.DATE_ADDED,
         pagination: PaginationParams | None = None,
     ) -> tuple[list[Recipe], int]:
-        pattern: str = f"%{query_text}%"
-        where_clause = or_(
-            Recipe.title_en.ilike(pattern),
-            Recipe.title_ru.ilike(pattern),
-            Recipe.ingredients.any(
-                or_(
-                    Ingredient.name_en.ilike(pattern),
-                    Ingredient.name_ru.ilike(pattern),
-                    Ingredient.normalized_name_en.ilike(pattern),
-                    Ingredient.normalized_name_ru.ilike(pattern),
-                ),
+        sim_en = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("en"), ""),
+            query_text,
+        )
+        sim_ru = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("ru"), ""),
+            query_text,
+        )
+        sim_es = func.similarity(
+            func.coalesce(Recipe.title.op("->>")("es"), ""),
+            query_text,
+        )
+        max_sim = func.greatest(sim_en, sim_ru, sim_es)
+
+        ilike_condition = or_(
+            Recipe.title.op("->>")("en").ilike(f"%{query_text}%"),
+            Recipe.title.op("->>")("ru").ilike(f"%{query_text}%"),
+            Recipe.title.op("->>")("es").ilike(f"%{query_text}%"),
+        )
+        title_search_filter = or_(max_sim >= 0.25, ilike_condition)
+
+        ingredient_filter = Recipe.ingredients.any(
+            or_(
+                Ingredient.name.ilike(f"%{query_text}%"),
+                Ingredient.normalized_name.ilike(f"%{query_text}%"),
             ),
         )
 
-        count_stmt = select(func.count()).select_from(Recipe).where(where_clause)
+        where_clause = or_(title_search_filter, ingredient_filter)
+
+        count_stmt = (
+            select(func.count())
+            .select_from(Recipe)
+            .where(
+                where_clause,
+            )
+        )
         total_count: int | None = await self.session.scalar(count_stmt)
 
         stmt = (
@@ -173,9 +228,12 @@ class RecipeRepo(BaseRepo):
         )
 
         if sort_order == SortOrder.ALPHABETICAL:
-            stmt = stmt.order_by(Recipe.title_en.asc(), Recipe.id.asc())
+            stmt = stmt.order_by(
+                func.coalesce(Recipe.title.op("->>")("en"), "").asc(),
+                Recipe.id.asc(),
+            )
         else:
-            stmt = stmt.order_by(Recipe.created_at.desc(), Recipe.id.desc())
+            stmt = stmt.order_by(max_sim.desc(), Recipe.id.desc())
 
         if pagination is not None:
             stmt = stmt.offset(pagination.offset).limit(pagination.page_size)
@@ -201,11 +259,9 @@ class RecipeRepo(BaseRepo):
     async def create(self, dto: RecipeCreateDTO) -> Recipe:
         recipe = Recipe(
             category_id=dto.category_id,
-            title_en=dto.title_en,
-            title_ru=dto.title_ru,
+            title=dto.title,
             prep_time_minutes=dto.prep_time_minutes,
-            instructions_en=dto.instructions_en,
-            instructions_ru=dto.instructions_ru,
+            instructions=dto.instructions,
             photo_file_id=dto.photo_file_id,
             video_file_id=dto.video_file_id,
             document_file_id=dto.document_file_id,
@@ -216,22 +272,15 @@ class RecipeRepo(BaseRepo):
         await self.session.flush()
 
         for ing_dto in dto.ingredients:
-            normalized_en: str = (
-                ing_dto.normalized_name_en
-                if ing_dto.normalized_name_en is not None
-                else ing_dto.name_en.strip().lower()
-            )
-            normalized_ru: str = (
-                ing_dto.normalized_name_ru
-                if ing_dto.normalized_name_ru is not None
-                else ing_dto.name_ru.strip().lower()
+            normalized: str = (
+                ing_dto.normalized_name
+                if ing_dto.normalized_name is not None
+                else ing_dto.name.strip().lower()
             )
             ingredient = Ingredient(
                 recipe_id=recipe.id,
-                name_en=ing_dto.name_en,
-                name_ru=ing_dto.name_ru,
-                normalized_name_en=normalized_en,
-                normalized_name_ru=normalized_ru,
+                name=ing_dto.name,
+                normalized_name=normalized,
                 quantity=ing_dto.quantity,
                 unit=ing_dto.unit,
             )
@@ -262,26 +311,21 @@ class RecipeRepo(BaseRepo):
             await self.session.execute(stmt)
 
         if dto.ingredients is not None:
-            del_stmt = delete(Ingredient).where(Ingredient.recipe_id == recipe_id)
+            del_stmt = delete(Ingredient).where(
+                Ingredient.recipe_id == recipe_id,
+            )
             await self.session.execute(del_stmt)
 
             for ing_dto in dto.ingredients:
-                normalized_en: str = (
-                    ing_dto.normalized_name_en
-                    if ing_dto.normalized_name_en is not None
-                    else ing_dto.name_en.strip().lower()
-                )
-                normalized_ru: str = (
-                    ing_dto.normalized_name_ru
-                    if ing_dto.normalized_name_ru is not None
-                    else ing_dto.name_ru.strip().lower()
+                normalized: str = (
+                    ing_dto.normalized_name
+                    if ing_dto.normalized_name is not None
+                    else ing_dto.name.strip().lower()
                 )
                 ingredient = Ingredient(
                     recipe_id=recipe_id,
-                    name_en=ing_dto.name_en,
-                    name_ru=ing_dto.name_ru,
-                    normalized_name_en=normalized_en,
-                    normalized_name_ru=normalized_ru,
+                    name=ing_dto.name,
+                    normalized_name=normalized,
                     quantity=ing_dto.quantity,
                     unit=ing_dto.unit,
                 )

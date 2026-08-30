@@ -6,10 +6,8 @@ class RecipeCreateWizard(StatesGroup):
     title_ru: State = State()
     category_id: State = State()
     prep_time: State = State()
-    ingredients_en: State = State()
-    ingredients_ru: State = State()
-    instructions_en: State = State()
-    instructions_ru: State = State()
+    ingredients: State = State()
+    instructions: State = State()
     photo: State = State()
     video: State = State()
     pdf: State = State()
@@ -23,10 +21,7 @@ class RecipeEditWizard(StatesGroup):
     category_id: State = State()
     prep_time: State = State()
     ingredients: State = State()
-    ingredients_en: State = State()
-    ingredients_ru: State = State()
-    instructions_en: State = State()
-    instructions_ru: State = State()
+    instructions: State = State()
     media: State = State()
     photo: State = State()
     video: State = State()
@@ -40,6 +35,5 @@ class RecipeTemplateImportState(StatesGroup):
 
 
 class CategoryCreateWizard(StatesGroup):
-    name_en: State = State()
-    name_ru: State = State()
+    name: State = State()
     parent_id: State = State()

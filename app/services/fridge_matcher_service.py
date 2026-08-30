@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.i18n.helpers import get_localized_text
 from app.database.models.ingredient import Ingredient
 from app.database.models.recipe import Recipe
 from app.database.repositories.fridge_repo import FridgeRepo
@@ -37,20 +38,16 @@ class FridgeMatcherService:
         ingredient: Ingredient,
         fridge_items: set[str],
     ) -> bool:
-        norm_en: str = (ingredient.normalized_name_en or "").strip().lower()
-        norm_ru: str = (ingredient.normalized_name_ru or "").strip().lower()
+        norm: str = (ingredient.normalized_name or "").strip().lower()
 
-        if norm_en in fridge_items or norm_ru in fridge_items:
+        if norm in fridge_items:
             return True
 
         for item in fridge_items:
             if not item:
                 continue
 
-            if norm_en and (item in norm_en or norm_en in item):
-                return True
-
-            if norm_ru and (item in norm_ru or norm_ru in item):
+            if norm and (item in norm or norm in item):
                 return True
 
         return False
@@ -65,9 +62,7 @@ class FridgeMatcherService:
         missing: list[str] = []
 
         for ing in recipe.ingredients:
-            display_name: str = (
-                ing.name_ru if locale == "ru" and ing.name_ru else ing.name_en
-            )
+            display_name: str = ing.name
 
             if self.is_ingredient_matched(ing, fridge_ingredients):
                 matched.append(display_name)
@@ -96,7 +91,7 @@ class FridgeMatcherService:
         locale: str = "en",
     ) -> list[RecipeMatchResultDTO]:
         user_items: list[str] = await self.fridge_repo.get_user_normalized_names(
-            user_id
+            user_id,
         )
         if not user_items:
             return []
@@ -117,7 +112,7 @@ class FridgeMatcherService:
         results.sort(
             key=lambda r: (
                 -r.match_percentage,
-                r.recipe.title_ru if locale == "ru" else r.recipe.title_en,
+                get_localized_text(r.recipe.title, locale=locale),
             ),
         )
 
@@ -130,7 +125,7 @@ class FridgeMatcherService:
         locale: str = "en",
     ) -> list[RecipeMatchResultDTO]:
         user_items: list[str] = await self.fridge_repo.get_user_normalized_names(
-            user_id
+            user_id,
         )
         if not user_items:
             return []
@@ -153,7 +148,7 @@ class FridgeMatcherService:
             key=lambda r: (
                 len(r.missing_ingredients),
                 -r.match_percentage,
-                r.recipe.title_ru if locale == "ru" else r.recipe.title_en,
+                get_localized_text(r.recipe.title, locale=locale),
             ),
         )
 
@@ -189,7 +184,7 @@ class FridgeMatcherService:
             key=lambda r: (
                 -r.match_percentage,
                 len(r.missing_ingredients),
-                r.recipe.title_ru if locale == "ru" else r.recipe.title_en,
+                get_localized_text(r.recipe.title, locale=locale),
             ),
         )
 

@@ -1,3 +1,5 @@
+import html
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
@@ -64,8 +66,13 @@ def _render_fridge_view(
         keyboard = get_fridge_main_keyboard(items_count=0, locale=locale)
         return text, keyboard
 
-    items_list_str: str = "\n".join([f"• {item.raw_name}" for item in items])
-    text = f"{t('fridge_title', locale=locale)}\n\n{t('fridge_items_list', locale=locale, count=len(items), items=items_list_str)}"
+    items_list_str: str = "\n".join(
+        [f"• {html.escape(item.raw_name)}" for item in items],
+    )
+    text = (
+        f"{t('fridge_title', locale=locale)}\n\n"
+        f"{t('fridge_items_list', locale=locale, count=len(items), items=items_list_str)}"
+    )
     keyboard = get_fridge_main_keyboard(items_count=len(items), locale=locale)
 
     return text, keyboard

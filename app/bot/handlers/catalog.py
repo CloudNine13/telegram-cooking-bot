@@ -1,3 +1,5 @@
+import html
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
@@ -17,6 +19,7 @@ from app.bot.keyboards.catalog import (
     get_subcategories_keyboard,
     get_top_categories_keyboard,
 )
+from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
 from app.core.i18n.translator import t
 from app.database.models.user import User
@@ -73,20 +76,16 @@ def _format_recipe_card(
     recipe: RecipeDTO,
     locale: str = DEFAULT_LOCALE,
 ) -> str:
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
     category_name: str = ""
     if recipe.category is not None:
-        category_name = (
-            recipe.category.name_ru
-            if locale == "ru" and recipe.category.name_ru
-            else recipe.category.name_en
+        category_name = html.escape(
+            get_localized_text(recipe.category.name, locale),
         )
 
     ingredients_lines: list[str] = []
     for ing in recipe.ingredients:
-        ing_name: str = ing.name_ru if locale == "ru" and ing.name_ru else ing.name_en
+        ing_name: str = html.escape(ing.name)
         qty_unit_parts: list[str] = []
         if ing.quantity is not None:
             formatted_qty: str = (
@@ -94,9 +93,9 @@ def _format_recipe_card(
                 if isinstance(ing.quantity, float)
                 else str(ing.quantity)
             )
-            qty_unit_parts.append(formatted_qty)
+            qty_unit_parts.append(html.escape(formatted_qty))
         if ing.unit is not None:
-            qty_unit_parts.append(ing.unit)
+            qty_unit_parts.append(html.escape(ing.unit))
 
         if qty_unit_parts:
             ingredients_lines.append(f"• {ing_name} - {' '.join(qty_unit_parts)}")
@@ -104,11 +103,7 @@ def _format_recipe_card(
             ingredients_lines.append(f"• {ing_name}")
 
     ingredients_str: str = "\n".join(ingredients_lines) if ingredients_lines else "-"
-    instructions_str: str = (
-        recipe.instructions_ru
-        if locale == "ru" and recipe.instructions_ru
-        else recipe.instructions_en
-    )
+    instructions_str: str = html.escape(recipe.instructions)
 
     return t(
         "recipe_card",
@@ -184,52 +179,62 @@ async def handle_category_nav_callback(
     recipe_service: RecipeService,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_id: int = int(callback_data.category_id or 1)
+    category_id: int = int(callback_data.category_id or 0)
 
-    parent_category: CategoryDTO | None = await category_service.get_category_by_id(
-        category_id,
-    )
-    if parent_category is None:
-        await callback.answer(t("category_empty", locale=locale))
-        return
+    cat_name: str
+    paginated_recipes: PaginatedResponse[RecipeDTO]
 
-    subcategories: list[CategoryDTO] = await category_service.get_subcategories(
-        category_id,
-    )
-    if subcategories and callback_data.parent_id is None:
-        text: str = t("subcategory_select", locale=locale)
-        keyboard = get_subcategories_keyboard(
-            parent=parent_category,
-            subcategories=subcategories,
-            locale=locale,
+    if category_id == 0:
+        cat_name = t("cat_all", locale=locale)
+        paginated_recipes = await recipe_service.list_by_category(
+            category_id=None,
+            sort_order=callback_data.sort_order,
+            pagination=PaginationParams(
+                page=callback_data.page,
+                page_size=5,
+            ),
+            include_subcategories=True,
         )
-        if callback.message is not None:
-            await _edit_or_resend_message(
-                message=callback.message,
-                text=text,
-                reply_markup=keyboard,
+    else:
+        parent_category: CategoryDTO | None = await category_service.get_category_by_id(
+            category_id,
+        )
+        if parent_category is None:
+            await callback.answer(t("category_empty", locale=locale))
+            return
+
+        subcategories: list[CategoryDTO] = await category_service.get_subcategories(
+            category_id,
+        )
+        if subcategories and callback_data.parent_id is None:
+            text: str = t("subcategory_select", locale=locale)
+            keyboard = get_subcategories_keyboard(
+                parent=parent_category,
+                subcategories=subcategories,
+                locale=locale,
             )
-        await callback.answer()
-        return
+            if callback.message is not None:
+                await _edit_or_resend_message(
+                    message=callback.message,
+                    text=text,
+                    reply_markup=keyboard,
+                )
+            await callback.answer()
+            return
 
-    paginated_recipes: PaginatedResponse[
-        RecipeDTO
-    ] = await recipe_service.list_by_category(
-        category_id=category_id,
-        sort_order=callback_data.sort_order,
-        pagination=PaginationParams(
-            page=callback_data.page,
-            page_size=5,
-        ),
-        include_subcategories=True,
-    )
-
-    cat_name: str = (
-        parent_category.name_ru if locale == "ru" else parent_category.name_en
-    )
+        paginated_recipes = await recipe_service.list_by_category(
+            category_id=category_id,
+            sort_order=callback_data.sort_order,
+            pagination=PaginationParams(
+                page=callback_data.page,
+                page_size=5,
+            ),
+            include_subcategories=True,
+        )
+        cat_name = html.escape(get_localized_text(parent_category.name, locale))
 
     if paginated_recipes.total_count == 0:
-        empty_text: str = f"📂 *{cat_name}*\n\n" + t(
+        empty_text: str = f"📂 <b>{cat_name}</b>\n\n" + t(
             "category_empty",
             locale=locale,
         )
@@ -256,7 +261,7 @@ async def handle_category_nav_callback(
         if callback_data.sort_order == SortOrder.ALPHABETICAL
         else t("sort_date_active", locale=locale)
     )
-    header_text: str = f"📂 *{cat_name}*\n{sort_label}\n"
+    header_text: str = f"📂 <b>{cat_name}</b>\n{sort_label}\n"
     list_keyboard = get_recipes_list_keyboard(
         recipes=paginated_recipes.items,
         category_id=category_id,
@@ -286,31 +291,45 @@ async def handle_sort_toggle_callback(
 ) -> None:
     category_id: int = callback_data.category_id
 
-    category: CategoryDTO | None = await category_service.get_category_by_id(
-        category_id,
-    )
-    cat_name: str = ""
-    if category is not None:
-        cat_name = category.name_ru if locale == "ru" else category.name_en
+    cat_name: str
+    paginated_recipes: PaginatedResponse[RecipeDTO]
 
-    paginated_recipes: PaginatedResponse[
-        RecipeDTO
-    ] = await recipe_service.list_by_category(
-        category_id=category_id,
-        sort_order=callback_data.current_sort,
-        pagination=PaginationParams(
-            page=1,
-            page_size=5,
-        ),
-        include_subcategories=True,
-    )
+    if category_id == 0:
+        cat_name = t("cat_all", locale=locale)
+        paginated_recipes = await recipe_service.list_by_category(
+            category_id=None,
+            sort_order=callback_data.current_sort,
+            pagination=PaginationParams(
+                page=1,
+                page_size=5,
+            ),
+            include_subcategories=True,
+        )
+    else:
+        category: CategoryDTO | None = await category_service.get_category_by_id(
+            category_id,
+        )
+        cat_name = (
+            html.escape(get_localized_text(category.name, locale))
+            if category is not None
+            else ""
+        )
+        paginated_recipes = await recipe_service.list_by_category(
+            category_id=category_id,
+            sort_order=callback_data.current_sort,
+            pagination=PaginationParams(
+                page=1,
+                page_size=5,
+            ),
+            include_subcategories=True,
+        )
 
     sort_label: str = (
         t("sort_alpha_active", locale=locale)
         if callback_data.current_sort == SortOrder.ALPHABETICAL
         else t("sort_date_active", locale=locale)
     )
-    header_text: str = f"📂 *{cat_name}*\n{sort_label}\n"
+    header_text: str = f"📂 <b>{cat_name}</b>\n{sort_label}\n"
     list_keyboard = get_recipes_list_keyboard(
         recipes=paginated_recipes.items,
         category_id=category_id,
@@ -405,9 +424,7 @@ async def handle_recipe_media_callback(
         )
         return
 
-    title: str = (
-        recipe.title_ru if locale == "ru" and recipe.title_ru else recipe.title_en
-    )
+    title: str = html.escape(get_localized_text(recipe.title, locale))
 
     if callback_data.media_type == "pdf":
         if recipe.document_file_id:
