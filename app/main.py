@@ -1,6 +1,11 @@
 import asyncio
 import logging
+import pathlib
 import sys
+
+project_root: str = str(pathlib.Path(__file__).resolve().parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
