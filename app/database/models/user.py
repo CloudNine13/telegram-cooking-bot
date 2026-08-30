@@ -7,7 +7,6 @@ from app.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.database.models.favorite import Favorite
-    from app.database.models.fridge import FridgeItem
 
 
 class User(Base, TimestampMixin):
@@ -33,12 +32,6 @@ class User(Base, TimestampMixin):
         nullable=False,
     )
 
-    fridge_items: Mapped[list["FridgeItem"]] = relationship(
-        "FridgeItem",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
     favorites: Mapped[list["Favorite"]] = relationship(
         "Favorite",
         back_populates="user",
