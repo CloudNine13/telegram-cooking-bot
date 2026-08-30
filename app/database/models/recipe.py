@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.models.base import Base, TimestampMixin
@@ -25,15 +26,9 @@ class Recipe(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    title_en: Mapped[str] = mapped_column(
-        String(255),
+    title: Mapped[dict[str, str]] = mapped_column(
+        JSONB,
         nullable=False,
-        index=True,
-    )
-    title_ru: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        index=True,
     )
     prep_time_minutes: Mapped[int] = mapped_column(
         Integer,
@@ -41,11 +36,7 @@ class Recipe(Base, TimestampMixin):
         server_default="0",
         nullable=False,
     )
-    instructions_en: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
-    instructions_ru: Mapped[str] = mapped_column(
+    instructions: Mapped[str] = mapped_column(
         Text,
         nullable=False,
     )
@@ -73,6 +64,7 @@ class Recipe(Base, TimestampMixin):
     category: Mapped["Category"] = relationship(
         "Category",
         back_populates="recipes",
+        lazy="selectin",
     )
     ingredients: Mapped[list["Ingredient"]] = relationship(
         "Ingredient",

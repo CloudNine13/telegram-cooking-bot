@@ -58,4 +58,5 @@ class Favorite(Base):
     recipe: Mapped["Recipe"] = relationship(
         "Recipe",
         back_populates="favorites",
+        lazy="selectin",
     )

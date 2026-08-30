@@ -23,20 +23,11 @@ class Ingredient(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    name_en: Mapped[str] = mapped_column(
+    name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
     )
-    name_ru: Mapped[str] = mapped_column(
-        String(150),
-        nullable=False,
-    )
-    normalized_name_en: Mapped[str] = mapped_column(
-        String(150),
-        nullable=False,
-        index=True,
-    )
-    normalized_name_ru: Mapped[str] = mapped_column(
+    normalized_name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
         index=True,

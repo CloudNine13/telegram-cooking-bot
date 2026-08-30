@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.models.base import Base, TimestampMixin
@@ -23,12 +24,8 @@ class Category(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    name_en: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-    name_ru: Mapped[str] = mapped_column(
-        String(100),
+    name: Mapped[dict[str, str]] = mapped_column(
+        JSONB,
         nullable=False,
     )
     slug: Mapped[str] = mapped_column(
@@ -54,6 +51,7 @@ class Category(Base, TimestampMixin):
         back_populates="parent",
         cascade="all, delete-orphan",
         order_by="Category.order_index",
+        lazy="selectin",
     )
     recipes: Mapped[list["Recipe"]] = relationship(
         "Recipe",
