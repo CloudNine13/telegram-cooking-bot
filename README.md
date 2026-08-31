@@ -100,7 +100,7 @@ Application configuration is managed via environment variables or a local `.env`
 |---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | String | `""` | Telegram Bot API token from BotFather. |
 | `ADMIN_USER_IDS` | List / String | `[]` | Comma-separated or JSON list of Telegram user IDs with administrative privileges. |
-| `DATABASE_URL` | String | `postgresql+asyncpg://postgres:postgres@localhost:5432/cooking_bot` | Async connection string for PostgreSQL database. |
+| `DATABASE_URL` | String | `""` | Async connection string for PostgreSQL database. |
 | `REDIS_URL` | String | `redis://localhost:6379/0` | Connection string for Redis instance. |
 | `DEFAULT_LOCALE` | String | `"en"` | Default interface language fallback (`en` or `ru`). |
 
@@ -124,7 +124,12 @@ Create a `.env` file in the project root:
 ```env
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 ADMIN_USER_IDS=123456789,987654321
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/cooking_bot
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=cooking_bot
+POSTGRES_PORT=5432
+REDIS_PORT=6379
+DATABASE_URL=postgresql+asyncpg://postgres:your_secure_password@localhost:5432/cooking_bot
 REDIS_URL=redis://localhost:6379/0
 DEFAULT_LOCALE=en
 ```

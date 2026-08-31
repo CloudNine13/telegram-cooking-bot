@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         validation_alias="ADMIN_USER_IDS",
     )
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/cooking_bot",
+        default="",
         validation_alias="DATABASE_URL",
     )
     redis_url: str = Field(
