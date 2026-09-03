@@ -30,7 +30,7 @@ class RecipeRepo(BaseRepo):
             .where(Recipe.id == recipe_id)
             .options(
                 selectinload(Recipe.ingredients),
-                selectinload(Recipe.categories),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
         result = await self.session.scalars(stmt)
@@ -46,7 +46,7 @@ class RecipeRepo(BaseRepo):
             .where(Recipe.id.in_(recipe_ids))
             .options(
                 selectinload(Recipe.ingredients),
-                selectinload(Recipe.categories),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
         result = await self.session.scalars(stmt)
@@ -84,7 +84,7 @@ class RecipeRepo(BaseRepo):
 
         stmt = select(Recipe).options(
             selectinload(Recipe.ingredients),
-            selectinload(Recipe.categories),
+            selectinload(Recipe.categories).selectinload(Category.parent),
         )
         if category_ids is not None:
             stmt = (
@@ -177,7 +177,7 @@ class RecipeRepo(BaseRepo):
                 )
                 .options(
                     selectinload(Recipe.ingredients),
-                    selectinload(Recipe.categories),
+                    selectinload(Recipe.categories).selectinload(Category.parent),
                 )
                 .distinct()
             )
@@ -190,7 +190,7 @@ class RecipeRepo(BaseRepo):
                 .where(title_search_filter)
                 .options(
                     selectinload(Recipe.ingredients),
-                    selectinload(Recipe.categories),
+                    selectinload(Recipe.categories).selectinload(Category.parent),
                 )
             )
 
@@ -256,7 +256,7 @@ class RecipeRepo(BaseRepo):
             .where(where_clause)
             .options(
                 selectinload(Recipe.ingredients),
-                selectinload(Recipe.categories),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
 
@@ -281,7 +281,7 @@ class RecipeRepo(BaseRepo):
             select(Recipe)
             .options(
                 selectinload(Recipe.ingredients),
-                selectinload(Recipe.categories),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
             .order_by(Recipe.id.asc())
         )

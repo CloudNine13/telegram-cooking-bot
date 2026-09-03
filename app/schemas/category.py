@@ -30,6 +30,7 @@ class CategoryDTO(BaseModel):
     name: dict[str, str]
     slug: str
     order_index: int = 0
+    parent: "CategoryDTO | None" = None
     subcategories: list["CategoryDTO"] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -42,18 +43,21 @@ class CategoryDTO(BaseModel):
 
         if hasattr(data, "__dict__"):
             subcats = data.__dict__.get("subcategories", [])
+            parent = data.__dict__.get("parent")
             return {
                 "id": getattr(data, "id", None),
                 "parent_id": getattr(data, "parent_id", None),
                 "name": getattr(data, "name", {}),
                 "slug": getattr(data, "slug", None),
                 "order_index": getattr(data, "order_index", 0),
+                "parent": parent,
                 "subcategories": subcats if subcats is not None else [],
                 "created_at": getattr(data, "created_at", None),
                 "updated_at": getattr(data, "updated_at", None),
             }
 
         return data
+
 
 
 CategoryDTO.model_rebuild()
