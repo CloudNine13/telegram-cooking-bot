@@ -3,7 +3,6 @@ from app.bot.states.recipe_wizard import (
     CategoryCreateWizard,
     RecipeCreateWizard,
     RecipeEditWizard,
-    RecipeTemplateImportState,
 )
 from app.bot.states.search import CategorySearchState, GlobalSearchState
 
@@ -14,5 +13,5 @@ __all__: list[str] = [
     "GlobalSearchState",
     "RecipeCreateWizard",
     "RecipeEditWizard",
-    "RecipeTemplateImportState",
 ]
+
