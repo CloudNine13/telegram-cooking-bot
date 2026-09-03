@@ -103,24 +103,17 @@ def _format_recipe_card(
     raw_title: str = _format_recipe_title(recipe.title, locale)
     title: str = html.escape(raw_title)
 
-    category_paths: list[str] = []
-    cat_by_id: dict[int, CategoryDTO] = {cat.id: cat for cat in recipe.categories}
-    for cat in recipe.categories:
-        cat_name: str = html.escape(get_localized_text(cat.name, locale))
-        parent_cat: CategoryDTO | None = (
-            cat.parent
-            if cat.parent is not None
-            else (cat_by_id.get(cat.parent_id) if cat.parent_id is not None else None)
-        )
-        if parent_cat is not None:
-            parent_name: str = html.escape(
-                get_localized_text(parent_cat.name, locale),
-            )
-            category_paths.append(f"{parent_name} > {cat_name}")
-        else:
-            category_paths.append(cat_name)
+    cat_names: list[str] = []
+    sorted_cats: list[CategoryDTO] = sorted(
+        recipe.categories,
+        key=lambda c: (c.parent_id is not None, c.order_index, c.id),
+    )
+    for cat in sorted_cats:
+        name: str = html.escape(get_localized_text(cat.name, locale))
+        if name and name not in cat_names:
+            cat_names.append(name)
 
-    categories_str: str = ", ".join(category_paths) if category_paths else ""
+    categories_str: str = ", ".join(cat_names)
 
     ingredients_lines: list[str] = []
     for ing in recipe.ingredients:
@@ -417,7 +410,7 @@ async def handle_recipe_view_callback(
     )
 
     card_text: str = _format_recipe_card(recipe=recipe, locale=locale)
-    view_keyboard = get_recipe_view_keyboard(
+    view_keyboard: InlineKeyboardMarkup = get_recipe_view_keyboard(
         recipe=recipe,
         is_favorite=is_favorite,
         locale=locale,
@@ -425,6 +418,7 @@ async def handle_recipe_view_callback(
         category_id=callback_data.category_id,
         page=callback_data.page,
         is_admin=is_admin,
+        parent_id=callback_data.parent_id,
     )
 
     if callback.message is not None:

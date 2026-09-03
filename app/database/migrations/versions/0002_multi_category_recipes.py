@@ -81,12 +81,12 @@ def upgrade() -> None:
                     SELECT
                         :parent_id,
                         CAST(:name AS jsonb),
-                        :slug,
+                        CAST(:slug AS VARCHAR(100)),
                         :order_index,
                         now(),
                         now()
                     WHERE NOT EXISTS (
-                        SELECT 1 FROM categories WHERE slug = :slug
+                        SELECT 1 FROM categories WHERE slug = CAST(:slug AS VARCHAR(100))
                     )
                     """
                 ),
