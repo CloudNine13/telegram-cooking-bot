@@ -30,10 +30,6 @@ class RecipeEditWizard(StatesGroup):
     instagram_url: State = State()
 
 
-class RecipeTemplateImportState(StatesGroup):
-    waiting_for_template: State = State()
-
-
 class CategoryCreateWizard(StatesGroup):
     name: State = State()
     parent_id: State = State()

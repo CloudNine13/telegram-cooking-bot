@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,25 @@ if TYPE_CHECKING:
     from app.database.models.ingredient import Ingredient
 
 
+recipe_categories: Table = Table(
+    "recipe_categories",
+    Base.metadata,
+    Column(
+        "recipe_id",
+        Integer,
+        ForeignKey("recipes.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        Integer,
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
+
+
 class Recipe(Base, TimestampMixin):
     __tablename__: str = "recipes"
 
@@ -19,12 +38,6 @@ class Recipe(Base, TimestampMixin):
         Integer,
         primary_key=True,
         autoincrement=True,
-    )
-    category_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("categories.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
     )
     title: Mapped[dict[str, str]] = mapped_column(
         JSONB,
@@ -61,8 +74,9 @@ class Recipe(Base, TimestampMixin):
         nullable=True,
     )
 
-    category: Mapped["Category"] = relationship(
+    categories: Mapped[list["Category"]] = relationship(
         "Category",
+        secondary=recipe_categories,
         back_populates="recipes",
         lazy="selectin",
     )

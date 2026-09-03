@@ -113,6 +113,14 @@ DEFAULT_CATEGORY_TAXONOMY: list[dict[str, Any]] = [
 ]
 
 
+class CategoryHasOrphanRecipesError(Exception):
+    def __init__(self, recipe_count: int) -> None:
+        self.recipe_count: int = recipe_count
+        super().__init__(
+            f"Category deletion would orphan {recipe_count} recipe(s)",
+        )
+
+
 class CategoryService:
     def __init__(
         self,
@@ -215,6 +223,16 @@ class CategoryService:
         return CategoryDTO.model_validate(category)
 
     async def delete_category(self, category_id: int) -> bool:
+        orphan_recipe_ids: list[
+            int
+        ] = await self.category_repo.get_orphan_recipe_ids_for_category(
+            category_id,
+        )
+        if orphan_recipe_ids:
+            raise CategoryHasOrphanRecipesError(
+                recipe_count=len(orphan_recipe_ids),
+            )
+
         result: bool = await self.category_repo.delete(category_id)
         if result:
             await self.session.commit()

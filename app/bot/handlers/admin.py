@@ -13,6 +13,7 @@ from app.bot.keyboards.admin import (
     get_admin_cancel_keyboard,
     get_admin_categories_keyboard,
     get_admin_category_detail_keyboard,
+    get_admin_category_multi_select_keyboard,
     get_admin_category_select_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_delete_confirm_keyboard,
@@ -25,7 +26,6 @@ from app.bot.states.recipe_wizard import (
     CategoryCreateWizard,
     RecipeCreateWizard,
     RecipeEditWizard,
-    RecipeTemplateImportState,
 )
 from app.core.i18n.helpers import get_localized_text
 from app.core.i18n.locales import DEFAULT_LOCALE
@@ -33,16 +33,19 @@ from app.core.i18n.translator import t
 from app.schemas.category import CategoryCreateDTO, CategoryDTO
 from app.schemas.recipe import (
     IngredientCreateDTO,
-    ParsedRecipeTemplateDTO,
     RecipeCreateDTO,
     RecipeDTO,
     RecipeUpdateDTO,
 )
-from app.services.category_service import CategoryService
+from app.services.category_service import (
+    CategoryHasOrphanRecipesError,
+    CategoryService,
+)
 from app.services.media_downloader_service import MediaDownloaderService
 from app.services.recipe_service import RecipeService
 
 admin_router: Router = Router(name="admin")
+
 admin_router.message.filter(IsAdminFilter())
 admin_router.callback_query.filter(IsAdminFilter())
 
@@ -111,8 +114,15 @@ async def _save_wizard_recipe(
         "ru": str(data.get("title_ru", "")),
     }
 
+    category_ids_raw = data.get("category_ids", [])
+    category_ids: list[int] = (
+        [int(c) for c in category_ids_raw]
+        if category_ids_raw
+        else [int(data.get("category_id", 1))]
+    )
+
     dto = RecipeCreateDTO(
-        category_id=int(data.get("category_id", 1)),
+        category_ids=category_ids,
         title=title,
         prep_time_minutes=int(data.get("prep_time_minutes", 0)),
         instructions=str(data.get("instructions", "")),
@@ -263,14 +273,15 @@ async def handle_wizard_title_ru(
     if not title_ru:
         return
 
-    await state.update_data(title_ru=title_ru)
+    await state.update_data(title_ru=title_ru, selected_category_ids=[])
     await state.set_state(RecipeCreateWizard.category_id)
 
-    categories: list[CategoryDTO] = await category_service.get_all_categories()
+    categories: list[CategoryDTO] = await category_service.get_category_tree()
 
     text: str = t("admin_wizard_category", locale=locale)
-    keyboard = get_admin_category_select_keyboard(
+    keyboard = get_admin_category_multi_select_keyboard(
         categories=categories,
+        selected_ids=set(),
         locale=locale,
     )
 
@@ -282,16 +293,59 @@ async def handle_wizard_title_ru(
 
 @admin_router.callback_query(
     RecipeCreateWizard.category_id,
-    AdminActionCallback.filter(F.action == "select_category"),
+    AdminActionCallback.filter(F.action == "toggle_category"),
 )
-async def handle_wizard_category_select(
+async def handle_wizard_category_toggle(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
+    category_service: CategoryService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_id: int = callback_data.target_id or 1
-    await state.update_data(category_id=category_id)
+    data = await state.get_data()
+    selected_ids: set[int] = set(data.get("selected_category_ids", []))
+    target_id: int | None = callback_data.target_id
+    if target_id is not None:
+        if target_id in selected_ids:
+            selected_ids.remove(target_id)
+        else:
+            selected_ids.add(target_id)
+
+    await state.update_data(selected_category_ids=list(selected_ids))
+
+    categories: list[CategoryDTO] = await category_service.get_category_tree()
+    keyboard = get_admin_category_multi_select_keyboard(
+        categories=categories,
+        selected_ids=selected_ids,
+        locale=locale,
+    )
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+        except TelegramBadRequest:
+            pass
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    RecipeCreateWizard.category_id,
+    AdminActionCallback.filter(F.action == "done_category"),
+)
+async def handle_wizard_category_done(
+    callback: CallbackQuery,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    data = await state.get_data()
+    selected_ids: list[int] = list(data.get("selected_category_ids", []))
+    if not selected_ids:
+        await callback.answer(
+            text=t("admin_select_at_least_one_category", locale=locale),
+            show_alert=True,
+        )
+        return
+
+    await state.update_data(category_ids=selected_ids)
     await state.set_state(RecipeCreateWizard.prep_time)
 
     text: str = t("admin_wizard_prep_time", locale=locale)
@@ -541,69 +595,6 @@ async def handle_wizard_pdf_message(
 
 
 @admin_router.callback_query(
-    AdminActionCallback.filter(F.action == "add_template"),
-)
-async def handle_add_template_callback(
-    callback: CallbackQuery,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    await state.clear()
-    await state.set_state(RecipeTemplateImportState.waiting_for_template)
-    text: str = t("admin_template_prompt", locale=locale)
-    keyboard = get_admin_cancel_keyboard(locale=locale)
-
-    if callback.message is not None:
-        await _edit_or_resend_message(
-            message=callback.message,
-            text=text,
-            reply_markup=keyboard,
-        )
-    await callback.answer()
-
-
-@admin_router.message(RecipeTemplateImportState.waiting_for_template)
-async def handle_template_message(
-    message: Message,
-    category_service: CategoryService,
-    recipe_service: RecipeService,
-    state: FSMContext,
-    locale: str = DEFAULT_LOCALE,
-) -> None:
-    raw_template: str = message.text or ""
-    parsed: ParsedRecipeTemplateDTO | None = RecipeService.parse_recipe_template(
-        raw_template,
-    )
-
-    if parsed is None:
-        await message.answer(
-            text=t("admin_template_invalid", locale=locale),
-            reply_markup=get_admin_cancel_keyboard(locale=locale),
-        )
-        return
-
-    top_categories: list[
-        CategoryDTO
-    ] = await category_service.get_top_level_categories()
-    fallback_id: int = top_categories[0].id if top_categories else 1
-
-    recipe: RecipeDTO = await recipe_service.create_from_parsed_template(
-        parsed=parsed,
-        fallback_category_id=fallback_id,
-    )
-    await state.clear()
-
-    title: str = html.escape(get_localized_text(recipe.title, locale))
-    text: str = t("admin_recipe_created", locale=locale, title=title)
-    keyboard = get_admin_dashboard_keyboard(locale=locale)
-
-    await message.answer(
-        text=text,
-        reply_markup=keyboard,
-    )
-
-
-@admin_router.callback_query(
     AdminActionCallback.filter(F.action == "edit_recipe"),
 )
 async def handle_edit_recipe_callback(
@@ -701,18 +692,32 @@ async def handle_edit_category_callback(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
     category_service: CategoryService,
+    recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    if callback_data.target_id is not None:
-        await state.update_data(recipe_id=callback_data.target_id)
+    recipe_id: int | None = callback_data.target_id
+    if recipe_id is not None:
+        await state.update_data(recipe_id=recipe_id)
+    else:
+        data = await state.get_data()
+        recipe_id = data.get("recipe_id")
+
+    selected_ids: set[int] = set()
+    if recipe_id is not None:
+        recipe = await recipe_service.get_recipe(recipe_id)
+        if recipe is not None:
+            selected_ids = {c.id for c in recipe.categories}
+
+    await state.update_data(selected_category_ids=list(selected_ids))
     await state.set_state(RecipeEditWizard.category_id)
 
-    categories: list[CategoryDTO] = await category_service.get_all_categories()
+    categories: list[CategoryDTO] = await category_service.get_category_tree()
 
     text: str = t("admin_edit_prompt_category", locale=locale)
-    keyboard = get_admin_category_select_keyboard(
+    keyboard = get_admin_category_multi_select_keyboard(
         categories=categories,
+        selected_ids=selected_ids,
         locale=locale,
     )
 
@@ -907,17 +912,59 @@ async def handle_edit_title_ru_input(
 
 @admin_router.callback_query(
     RecipeEditWizard.category_id,
-    AdminActionCallback.filter(F.action == "select_category"),
+    AdminActionCallback.filter(F.action == "toggle_category"),
 )
-async def handle_edit_category_select(
+async def handle_edit_category_toggle(
     callback: CallbackQuery,
     callback_data: AdminActionCallback,
+    category_service: CategoryService,
+    state: FSMContext,
+    locale: str = DEFAULT_LOCALE,
+) -> None:
+    data = await state.get_data()
+    selected_ids: set[int] = set(data.get("selected_category_ids", []))
+    target_id: int | None = callback_data.target_id
+    if target_id is not None:
+        if target_id in selected_ids:
+            selected_ids.remove(target_id)
+        else:
+            selected_ids.add(target_id)
+
+    await state.update_data(selected_category_ids=list(selected_ids))
+
+    categories: list[CategoryDTO] = await category_service.get_category_tree()
+    keyboard = get_admin_category_multi_select_keyboard(
+        categories=categories,
+        selected_ids=selected_ids,
+        locale=locale,
+    )
+    if callback.message is not None:
+        try:
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+        except TelegramBadRequest:
+            pass
+    await callback.answer()
+
+
+@admin_router.callback_query(
+    RecipeEditWizard.category_id,
+    AdminActionCallback.filter(F.action == "done_category"),
+)
+async def handle_edit_category_done(
+    callback: CallbackQuery,
     recipe_service: RecipeService,
     state: FSMContext,
     locale: str = DEFAULT_LOCALE,
 ) -> None:
-    category_id: int = callback_data.target_id or 1
     data = await state.get_data()
+    selected_ids: list[int] = list(data.get("selected_category_ids", []))
+    if not selected_ids:
+        await callback.answer(
+            text=t("admin_select_at_least_one_category", locale=locale),
+            show_alert=True,
+        )
+        return
+
     recipe_id: int | None = data.get("recipe_id")
     if recipe_id is None:
         await state.clear()
@@ -926,7 +973,7 @@ async def handle_edit_category_select(
 
     updated: RecipeDTO | None = await recipe_service.update_recipe(
         recipe_id=recipe_id,
-        dto=RecipeUpdateDTO(category_id=category_id),
+        dto=RecipeUpdateDTO(category_ids=selected_ids),
     )
     await state.clear()
 
@@ -1351,7 +1398,16 @@ async def handle_delete_category_callback(
 ) -> None:
     category_id: int | None = callback_data.target_id
     if category_id is not None:
-        await category_service.delete_category(category_id)
+        try:
+            await category_service.delete_category(category_id)
+        except CategoryHasOrphanRecipesError as exc:
+            error_msg: str = t(
+                "admin_category_orphan_error",
+                locale=locale,
+                count=exc.recipe_count,
+            )
+            await callback.answer(text=error_msg, show_alert=True)
+            return
 
     categories: list[CategoryDTO] = await category_service.get_all_categories()
 

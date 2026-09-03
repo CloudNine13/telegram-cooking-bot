@@ -1,13 +1,42 @@
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, case, delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.database.models.category import Category
+from app.database.models.recipe import recipe_categories
 from app.database.repositories.base import BaseRepo
 from app.schemas.category import CategoryCreateDTO, CategoryUpdateDTO
 
 
 class CategoryRepo(BaseRepo):
+    async def get_orphan_recipe_ids_for_category(
+        self,
+        category_id: int,
+    ) -> list[int]:
+        subcat_stmt = select(Category.id).where(
+            Category.parent_id == category_id,
+        )
+        subcat_res = await self.session.scalars(subcat_stmt)
+        affected_ids: list[int] = [category_id, *list(subcat_res.all())]
+
+        matching_count = func.count(
+            case((recipe_categories.c.category_id.in_(affected_ids), 1)),
+        )
+        stmt = (
+            select(recipe_categories.c.recipe_id)
+            .group_by(recipe_categories.c.recipe_id)
+            .having(
+                and_(
+                    func.count(recipe_categories.c.category_id) == matching_count,
+                    matching_count > 0,
+                ),
+            )
+        )
+        result = await self.session.scalars(stmt)
+
+        return list(result.all())
+
     async def get_by_id(self, category_id: int) -> Category | None:
+
         stmt = (
             select(Category)
             .where(Category.id == category_id)

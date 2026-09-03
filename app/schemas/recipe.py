@@ -31,7 +31,7 @@ class IngredientDTO(BaseModel):
 class RecipeCreateDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    category_id: int
+    category_ids: list[int] = Field(min_length=1)
     title: dict[str, str] = Field(min_length=1)
     prep_time_minutes: int = Field(default=0, ge=0)
     instructions: str = Field(min_length=1)
@@ -46,7 +46,7 @@ class RecipeCreateDTO(BaseModel):
 class RecipeUpdateDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    category_id: int | None = Field(default=None)
+    category_ids: list[int] | None = Field(default=None)
     title: dict[str, str] | None = Field(default=None)
     prep_time_minutes: int | None = Field(default=None, ge=0)
     instructions: str | None = Field(default=None, min_length=1)
@@ -62,7 +62,6 @@ class RecipeDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    category_id: int
     title: dict[str, str]
     prep_time_minutes: int = 0
     instructions: str
@@ -71,7 +70,7 @@ class RecipeDTO(BaseModel):
     document_file_id: str | None = None
     source_url: str | None = None
     instagram_url: str | None = None
-    category: CategoryDTO | None = None
+    categories: list[CategoryDTO] = Field(default_factory=list)
     ingredients: list[IngredientDTO] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -83,11 +82,10 @@ class RecipeDTO(BaseModel):
             return data
 
         if hasattr(data, "__dict__"):
-            cat = data.__dict__.get("category")
+            cats = data.__dict__.get("categories", [])
             ings = data.__dict__.get("ingredients", [])
             return {
                 "id": getattr(data, "id", None),
-                "category_id": getattr(data, "category_id", None),
                 "title": getattr(data, "title", {}),
                 "prep_time_minutes": getattr(data, "prep_time_minutes", 0),
                 "instructions": getattr(data, "instructions", ""),
@@ -96,26 +94,10 @@ class RecipeDTO(BaseModel):
                 "document_file_id": getattr(data, "document_file_id", None),
                 "source_url": getattr(data, "source_url", None),
                 "instagram_url": getattr(data, "instagram_url", None),
-                "category": cat,
+                "categories": cats if cats is not None else [],
                 "ingredients": ings if ings is not None else [],
                 "created_at": getattr(data, "created_at", None),
                 "updated_at": getattr(data, "updated_at", None),
             }
 
         return data
-
-
-class ParsedRecipeTemplateDTO(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    title: dict[str, str] | None = Field(default=None)
-    title_en: str | None = Field(default=None, max_length=255)
-    title_ru: str | None = Field(default=None, max_length=255)
-    category_slug: str | None = Field(default=None, max_length=100)
-    prep_time_minutes: int = Field(default=0, ge=0)
-    instructions: str | None = Field(default=None)
-    instructions_en: str | None = Field(default=None)
-    instructions_ru: str | None = Field(default=None)
-    source_url: str | None = Field(default=None, max_length=1024)
-    instagram_url: str | None = Field(default=None, max_length=1024)
-    ingredients: list[IngredientCreateDTO] = Field(default_factory=list)
