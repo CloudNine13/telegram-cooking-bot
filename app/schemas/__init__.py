@@ -16,7 +16,6 @@ from app.schemas.fridge import (
 from app.schemas.recipe import (
     IngredientCreateDTO,
     IngredientDTO,
-    ParsedRecipeTemplateDTO,
     RecipeCreateDTO,
     RecipeDTO,
     RecipeUpdateDTO,
@@ -36,7 +35,6 @@ __all__: list[str] = [
     "IngredientDTO",
     "PaginatedResponse",
     "PaginationParams",
-    "ParsedRecipeTemplateDTO",
     "RecipeCreateDTO",
     "RecipeDTO",
     "RecipeMatchResultDTO",

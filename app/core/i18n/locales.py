@@ -79,13 +79,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recipe_card": (
             "🍳 <b>{title}</b>\n\n"
             "⏱️ <b>Prep Time:</b> {prep_time} min\n"
-            "📂 <b>Category:</b> {category}\n\n"
+            "📂 <b>Categories:</b> {category}\n\n"
             "🛒 <b>Ingredients:</b>\n{ingredients}\n\n"
             "👩‍🍳 <b>Instructions:</b>\n{instructions}"
         ),
         "recipe_prep_time": "{minutes} min",
         "recipe_ingredients_header": "🛒 Ingredients:",
         "recipe_instructions_header": "👩‍🍳 Instructions:",
+        "recipe_card_categories_label": "📁 Categories:",
         "recipe_not_found": "❌ Recipe not found.",
         "recipe_missing_ingredients": "⚠️ Missing ingredients ({count}): {items}",
         "recipe_pdf_caption": "📄 Printable recipe guide for <b>{title}</b>",
@@ -128,7 +129,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_menu": "⚙️ Admin Control Panel\nSelect an action:",
         "admin_unauthorized": "⛔ Access denied. Administrator privileges required.",
         "btn_admin_add_wizard": "➕ Add Recipe (Wizard)",
-        "btn_admin_add_template": "📝 Add Recipe (Template)",
         "btn_admin_manage_categories": "📁 Manage Categories",
         "btn_admin_edit_recipe": "✏️ Edit Recipe",
         "btn_admin_delete_recipe": "🗑️ Delete Recipe",
@@ -175,7 +175,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "admin_wizard_title_en": "📝 Step 1/7: Enter recipe title in Spanish:",
         "admin_wizard_title_ru": "📝 Step 2/7: Enter recipe title in Russian:",
-        "admin_wizard_category": "📂 Step 3/7: Select category for the recipe:",
+        "admin_wizard_category": "📂 Step 3/7: Select one or more categories for the recipe:",
         "admin_wizard_prep_time": "⏱️ Step 4/7: Enter prep time in minutes (number only):",
         "admin_wizard_ingredients": (
             "🛒 Step 5/7: Enter ingredients (one per line, format: <code>Name - Quantity Unit</code>):"
@@ -184,18 +184,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_wizard_photo": "📸 Step 7/7: Send recipe photo or /skip:",
         "admin_wizard_video": "🎬 Optional: Send video file or Instagram Reel URL (or /skip):",
         "admin_wizard_pdf": "📄 Optional: Send PDF file or Web URL (or /skip):",
-        "admin_template_prompt": (
-            "📝 Send recipe formatted with the template below:\n\n"
-            "Title (EN): ...\n"
-            "Title (RU): ...\n"
-            "Category: ...\n"
-            "Prep Time: ...\n"
-            "Ingredients:\n"
-            "- Item 1\n"
-            "Instructions:\n"
-            "..."
-        ),
-        "admin_template_invalid": "❌ Failed to parse template. Please check the format and try again.",
+        "admin_btn_done_categories": "✅ Done (Continue)",
+        "admin_select_at_least_one_category": "⚠️ Please select at least one category before continuing.",
+        "admin_category_orphan_error": "⚠️ Cannot delete category: {count} recipe(s) would be left without any category. Reassign or delete those recipes first.",
+        "admin_recipe_category_prompt": "Select one or more categories for this recipe:",
         "admin_category_created": "✅ Category <b>{name}</b> created successfully.",
         "admin_category_deleted": "✅ Category deleted successfully.",
         "admin_category_prompt_name": "📁 Enter category name:",
@@ -278,13 +270,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recipe_card": (
             "🍳 <b>{title}</b>\n\n"
             "⏱️ <b>Время приготовления:</b> {prep_time} мин\n"
-            "📂 <b>Категория:</b> {category}\n\n"
+            "📂 <b>Категории:</b> {category}\n\n"
             "🛒 <b>Ингредиенты:</b>\n{ingredients}\n\n"
             "👩‍🍳 <b>Инструкции:</b>\n{instructions}"
         ),
         "recipe_prep_time": "{minutes} мин",
         "recipe_ingredients_header": "🛒 Ингредиенты:",
         "recipe_instructions_header": "👩‍🍳 Инструкции:",
+        "recipe_card_categories_label": "📁 Категории:",
         "recipe_not_found": "❌ Рецепт не найден.",
         "recipe_missing_ingredients": "⚠️ Не хватает ингредиентов ({count}): {items}",
         "recipe_pdf_caption": "📄 Рецепт в формате PDF: <b>{title}</b>",
@@ -327,7 +320,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_menu": "⚙️ Панель администратора\nВыберите действие:",
         "admin_unauthorized": "⛔ Доступ запрещен. Требуются права администратора.",
         "btn_admin_add_wizard": "➕ Добавить рецепт (Пошагово)",
-        "btn_admin_add_template": "📝 Добавить рецепт (Шаблон)",
         "btn_admin_manage_categories": "📁 Управление категориями",
         "btn_admin_edit_recipe": "✏️ Редактировать рецепт",
         "btn_admin_delete_recipe": "🗑️ Удалить рецепт",
@@ -374,7 +366,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "admin_wizard_title_en": "📝 Шаг 1/7: Введите название рецепта на испанском:",
         "admin_wizard_title_ru": "📝 Шаг 2/7: Введите название рецепта на русском:",
-        "admin_wizard_category": "📂 Шаг 3/7: Выберите категорию для рецепта:",
+        "admin_wizard_category": "📂 Шаг 3/7: Выберите категории для рецепта:",
         "admin_wizard_prep_time": "⏱️ Шаг 4/7: Введите время приготовления в минутах (только число):",
         "admin_wizard_ingredients": (
             "🛒 Шаг 5/7: Введите ингредиенты (по одному на строку, формат: <code>Название - Количество Ед</code>):"
@@ -383,18 +375,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_wizard_photo": "📸 Шаг 7/7: Отправьте фото блюда или /skip:",
         "admin_wizard_video": "🎬 Опционально: Отправьте видео или ссылку на Instagram Reel (или /skip):",
         "admin_wizard_pdf": "📄 Опционально: Отправьте PDF файл или ссылку на веб-страницу (или /skip):",
-        "admin_template_prompt": (
-            "📝 Отправьте рецепт по шаблону:\n\n"
-            "Title (EN): ...\n"
-            "Title (RU): ...\n"
-            "Category: ...\n"
-            "Prep Time: ...\n"
-            "Ingredients:\n"
-            "- Продукт 1\n"
-            "Instructions:\n"
-            "..."
-        ),
-        "admin_template_invalid": "❌ Не удалось разобрать шаблон. Проверьте формат и попробуйте снова.",
+        "admin_btn_done_categories": "✅ Готово (Продолжить)",
+        "admin_select_at_least_one_category": "⚠️ Пожалуйста, выберите хотя бы одну категорию перед продолжением.",
+        "admin_category_orphan_error": "⚠️ Нельзя удалить категорию: {count} рецепт(ов) останутся без категории. Сначала измените или удалите эти рецепты.",
+        "admin_recipe_category_prompt": "Выберите одну или несколько категорий для этого рецепта:",
         "admin_category_created": "✅ Категория <b>{name}</b> успешно создана.",
         "admin_category_deleted": "✅ Категория успешно удалена.",
         "admin_category_prompt_name": "📁 Введите название категории:",
@@ -477,13 +461,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "recipe_card": (
             "🍳 <b>{title}</b>\n\n"
             "⏱️ <b>Tiempo de preparación:</b> {prep_time} min\n"
-            "📂 <b>Categoría:</b> {category}\n\n"
+            "📂 <b>Categorías:</b> {category}\n\n"
             "🛒 <b>Ingredientes:</b>\n{ingredients}\n\n"
             "👩‍🍳 <b>Instrucciones:</b>\n{instructions}"
         ),
         "recipe_prep_time": "{minutes} min",
         "recipe_ingredients_header": "🛒 Ingredientes:",
         "recipe_instructions_header": "👩‍🍳 Instrucciones:",
+        "recipe_card_categories_label": "📁 Categorías:",
         "recipe_not_found": "❌ Receta no encontrada.",
         "recipe_missing_ingredients": "⚠️ Ingredientes faltantes ({count}): {items}",
         "recipe_pdf_caption": "📄 Guía de receta en PDF para <b>{title}</b>",
@@ -526,7 +511,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_menu": "⚙️ Panel de Control de Administrador\nSelecciona una acción:",
         "admin_unauthorized": "⛔ Acceso denegado. Se requieren privilegios de administrador.",
         "btn_admin_add_wizard": "➕ Añadir Receta (Paso a paso)",
-        "btn_admin_add_template": "📝 Añadir Receta (Plantilla)",
         "btn_admin_manage_categories": "📁 Gestionar Categorías",
         "btn_admin_edit_recipe": "✏️ Editar Receta",
         "btn_admin_delete_recipe": "🗑️ Eliminar Receta",
@@ -573,7 +557,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "admin_wizard_title_en": "📝 Paso 1/7: Introduce el título de la receta en español:",
         "admin_wizard_title_ru": "📝 Paso 2/7: Introduce el título de la receta en ruso:",
-        "admin_wizard_category": "📂 Paso 3/7: Selecciona la categoría para la receta:",
+        "admin_wizard_category": "📂 Paso 3/7: Selecciona las categorías para la receta:",
         "admin_wizard_prep_time": "⏱️ Paso 4/7: Introduce el tiempo de preparación en minutos (solo número):",
         "admin_wizard_ingredients": (
             "🛒 Paso 5/7: Introduce los ingredientes (uno por línea, formato: <code>Nombre - Cantidad Unidad</code>):"
@@ -582,18 +566,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin_wizard_photo": "📸 Paso 7/7: Envía una foto del plato o /skip:",
         "admin_wizard_video": "🎬 Opcional: Envía archivo de video o URL de Instagram Reel (o /skip):",
         "admin_wizard_pdf": "📄 Opcional: Envía archivo PDF o enlace de página web (o /skip):",
-        "admin_template_prompt": (
-            "📝 Envía la receta con el formato de la plantilla siguiente:\n\n"
-            "Title (EN): ...\n"
-            "Title (RU): ...\n"
-            "Category: ...\n"
-            "Prep Time: ...\n"
-            "Ingredients:\n"
-            "- Item 1\n"
-            "Instructions:\n"
-            "..."
-        ),
-        "admin_template_invalid": "❌ No se pudo procesar la plantilla. Por favor, comprueba el formato e inténtalo de nuevo.",
+        "admin_btn_done_categories": "✅ Listo (Continuar)",
+        "admin_select_at_least_one_category": "⚠️ Por favor, selecciona al menos una categoría antes de continuar.",
+        "admin_category_orphan_error": "⚠️ No se puede eliminar la categoría: {count} receta(s) quedarían sin categoría. Reasigna o elimina esas recetas primero.",
+        "admin_recipe_category_prompt": "Selecciona una o más categorías para esta receta:",
         "admin_category_created": "✅ Categoría <b>{name}</b> creada con éxito.",
         "admin_category_deleted": "✅ Categoría eliminada con éxito.",
         "admin_category_prompt_name": "📁 Introduce el nombre de la categoría:",

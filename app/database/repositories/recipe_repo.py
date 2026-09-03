@@ -1,9 +1,9 @@
 from sqlalchemy import and_, delete, func, or_, select, update
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.database.models.category import Category
 from app.database.models.ingredient import Ingredient
-from app.database.models.recipe import Recipe
+from app.database.models.recipe import Recipe, recipe_categories
 from app.database.repositories.base import BaseRepo
 from app.schemas.common import PaginationParams, SortOrder
 from app.schemas.recipe import RecipeCreateDTO, RecipeUpdateDTO
@@ -30,7 +30,7 @@ class RecipeRepo(BaseRepo):
             .where(Recipe.id == recipe_id)
             .options(
                 selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
         result = await self.session.scalars(stmt)
@@ -46,7 +46,7 @@ class RecipeRepo(BaseRepo):
             .where(Recipe.id.in_(recipe_ids))
             .options(
                 selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
         result = await self.session.scalars(stmt)
@@ -60,27 +60,41 @@ class RecipeRepo(BaseRepo):
         pagination: PaginationParams | None = None,
         include_subcategories: bool = True,
     ) -> tuple[list[Recipe], int]:
-        where_clause = None
-
+        category_ids: list[int] | None = None
         if category_id is not None and category_id != 0:
-            category_ids: list[int] = await self._resolve_category_ids(
+            category_ids = await self._resolve_category_ids(
                 category_id,
                 include_subcategories,
             )
-            where_clause = Recipe.category_id.in_(category_ids)
 
-        count_stmt = select(func.count()).select_from(Recipe)
-        if where_clause is not None:
-            count_stmt = count_stmt.where(where_clause)
+        if category_ids is not None:
+            count_stmt = (
+                select(func.count(func.distinct(Recipe.id)))
+                .select_from(Recipe)
+                .join(
+                    recipe_categories,
+                    Recipe.id == recipe_categories.c.recipe_id,
+                )
+                .where(recipe_categories.c.category_id.in_(category_ids))
+            )
+        else:
+            count_stmt = select(func.count()).select_from(Recipe)
 
         total_count: int | None = await self.session.scalar(count_stmt)
 
         stmt = select(Recipe).options(
             selectinload(Recipe.ingredients),
-            joinedload(Recipe.category),
+            selectinload(Recipe.categories).selectinload(Category.parent),
         )
-        if where_clause is not None:
-            stmt = stmt.where(where_clause)
+        if category_ids is not None:
+            stmt = (
+                stmt.join(
+                    recipe_categories,
+                    Recipe.id == recipe_categories.c.recipe_id,
+                )
+                .where(recipe_categories.c.category_id.in_(category_ids))
+                .distinct()
+            )
 
         if sort_order == SortOrder.ALPHABETICAL:
             stmt = stmt.order_by(
@@ -127,35 +141,60 @@ class RecipeRepo(BaseRepo):
         )
         title_search_filter = or_(max_sim >= 0.25, ilike_condition)
 
-        where_clause = title_search_filter
-
+        category_ids: list[int] | None = None
         if category_id is not None and category_id != 0:
-            category_ids: list[int] = await self._resolve_category_ids(
+            category_ids = await self._resolve_category_ids(
                 category_id,
                 include_subcategories,
             )
-            where_clause = and_(
-                Recipe.category_id.in_(category_ids),
-                title_search_filter,
+
+        if category_ids is not None:
+            count_stmt = (
+                select(func.count(func.distinct(Recipe.id)))
+                .select_from(Recipe)
+                .join(
+                    recipe_categories,
+                    Recipe.id == recipe_categories.c.recipe_id,
+                )
+                .where(
+                    and_(
+                        recipe_categories.c.category_id.in_(category_ids),
+                        title_search_filter,
+                    ),
+                )
+            )
+            stmt = (
+                select(Recipe)
+                .join(
+                    recipe_categories,
+                    Recipe.id == recipe_categories.c.recipe_id,
+                )
+                .where(
+                    and_(
+                        recipe_categories.c.category_id.in_(category_ids),
+                        title_search_filter,
+                    ),
+                )
+                .options(
+                    selectinload(Recipe.ingredients),
+                    selectinload(Recipe.categories).selectinload(Category.parent),
+                )
+                .distinct()
+            )
+        else:
+            count_stmt = (
+                select(func.count()).select_from(Recipe).where(title_search_filter)
+            )
+            stmt = (
+                select(Recipe)
+                .where(title_search_filter)
+                .options(
+                    selectinload(Recipe.ingredients),
+                    selectinload(Recipe.categories).selectinload(Category.parent),
+                )
             )
 
-        count_stmt = (
-            select(func.count())
-            .select_from(Recipe)
-            .where(
-                where_clause,
-            )
-        )
         total_count: int | None = await self.session.scalar(count_stmt)
-
-        stmt = (
-            select(Recipe)
-            .where(where_clause)
-            .options(
-                selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
-            )
-        )
 
         if sort_order == SortOrder.ALPHABETICAL:
             stmt = stmt.order_by(
@@ -209,13 +248,7 @@ class RecipeRepo(BaseRepo):
 
         where_clause = or_(title_search_filter, ingredient_filter)
 
-        count_stmt = (
-            select(func.count())
-            .select_from(Recipe)
-            .where(
-                where_clause,
-            )
-        )
+        count_stmt = select(func.count()).select_from(Recipe).where(where_clause)
         total_count: int | None = await self.session.scalar(count_stmt)
 
         stmt = (
@@ -223,7 +256,7 @@ class RecipeRepo(BaseRepo):
             .where(where_clause)
             .options(
                 selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
         )
 
@@ -248,7 +281,7 @@ class RecipeRepo(BaseRepo):
             select(Recipe)
             .options(
                 selectinload(Recipe.ingredients),
-                joinedload(Recipe.category),
+                selectinload(Recipe.categories).selectinload(Category.parent),
             )
             .order_by(Recipe.id.asc())
         )
@@ -258,7 +291,6 @@ class RecipeRepo(BaseRepo):
 
     async def create(self, dto: RecipeCreateDTO) -> Recipe:
         recipe = Recipe(
-            category_id=dto.category_id,
             title=dto.title,
             prep_time_minutes=dto.prep_time_minutes,
             instructions=dto.instructions,
@@ -270,6 +302,13 @@ class RecipeRepo(BaseRepo):
         )
         self.session.add(recipe)
         await self.session.flush()
+
+        for cat_id in dto.category_ids:
+            cat_stmt = recipe_categories.insert().values(
+                recipe_id=recipe.id,
+                category_id=cat_id,
+            )
+            await self.session.execute(cat_stmt)
 
         for ing_dto in dto.ingredients:
             normalized: str = (
@@ -300,7 +339,7 @@ class RecipeRepo(BaseRepo):
         update_data: dict[str, object] = {
             k: v
             for k, v in dto.model_dump(
-                exclude={"ingredients"},
+                exclude={"ingredients", "category_ids"},
                 exclude_unset=True,
             ).items()
             if v is not None
@@ -309,6 +348,19 @@ class RecipeRepo(BaseRepo):
         if update_data:
             stmt = update(Recipe).where(Recipe.id == recipe_id).values(**update_data)
             await self.session.execute(stmt)
+
+        if dto.category_ids is not None:
+            del_cat_stmt = delete(recipe_categories).where(
+                recipe_categories.c.recipe_id == recipe_id,
+            )
+            await self.session.execute(del_cat_stmt)
+
+            for cat_id in dto.category_ids:
+                ins_cat_stmt = recipe_categories.insert().values(
+                    recipe_id=recipe_id,
+                    category_id=cat_id,
+                )
+                await self.session.execute(ins_cat_stmt)
 
         if dto.ingredients is not None:
             del_stmt = delete(Ingredient).where(

@@ -25,18 +25,13 @@ def get_admin_dashboard_keyboard(
     )
     builder.row(
         InlineKeyboardButton(
-            text=t("btn_admin_add_template", locale=locale),
-            callback_data=AdminActionCallback(action="add_template").pack(),
-        ),
-    )
-    builder.row(
-        InlineKeyboardButton(
             text=t("btn_admin_manage_categories", locale=locale),
             callback_data=AdminActionCallback(
                 action="manage_categories",
             ).pack(),
         ),
     )
+
     builder.row(
         InlineKeyboardButton(
             text=t("btn_fridge", locale=locale),
@@ -300,6 +295,56 @@ def get_admin_category_select_keyboard(
     builder.adjust(2)
 
     builder.row(
+        InlineKeyboardButton(
+            text=t("btn_cancel", locale=locale),
+            callback_data=AdminActionCallback(action="cancel").pack(),
+        ),
+    )
+
+    return builder.as_markup()
+
+
+def get_admin_category_multi_select_keyboard(
+    categories: list[CategoryDTO],
+    selected_ids: set[int],
+    locale: str = DEFAULT_LOCALE,
+) -> InlineKeyboardMarkup:
+    builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
+    seen_ids: set[int] = set()
+
+    def _add_category_button(cat: CategoryDTO, is_sub: bool = False) -> None:
+        if cat.id in seen_ids:
+            return
+        seen_ids.add(cat.id)
+        mark: str = "[✓]" if cat.id in selected_ids else "[ ]"
+        name: str = get_localized_text(cat.name, locale=locale)
+        label: str = (
+            f"  ↳ {mark} {name}"
+            if (is_sub or cat.parent_id is not None)
+            else f"{mark} {name}"
+        )
+        builder.row(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=AdminActionCallback(
+                    action="toggle_category",
+                    target_id=cat.id,
+                ).pack(),
+            ),
+        )
+
+    for category in categories:
+        _add_category_button(category)
+        for sub in category.subcategories:
+            _add_category_button(sub, is_sub=True)
+
+    builder.row(
+        InlineKeyboardButton(
+            text=t("admin_btn_done_categories", locale=locale),
+            callback_data=AdminActionCallback(
+                action="done_category",
+            ).pack(),
+        ),
         InlineKeyboardButton(
             text=t("btn_cancel", locale=locale),
             callback_data=AdminActionCallback(action="cancel").pack(),

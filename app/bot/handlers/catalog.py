@@ -102,11 +102,25 @@ def _format_recipe_card(
 ) -> str:
     raw_title: str = _format_recipe_title(recipe.title, locale)
     title: str = html.escape(raw_title)
-    category_name: str = ""
-    if recipe.category is not None:
-        category_name = html.escape(
-            get_localized_text(recipe.category.name, locale),
+
+    category_paths: list[str] = []
+    cat_by_id: dict[int, CategoryDTO] = {cat.id: cat for cat in recipe.categories}
+    for cat in recipe.categories:
+        cat_name: str = html.escape(get_localized_text(cat.name, locale))
+        parent_cat: CategoryDTO | None = (
+            cat.parent
+            if cat.parent is not None
+            else (cat_by_id.get(cat.parent_id) if cat.parent_id is not None else None)
         )
+        if parent_cat is not None:
+            parent_name: str = html.escape(
+                get_localized_text(parent_cat.name, locale),
+            )
+            category_paths.append(f"{parent_name} > {cat_name}")
+        else:
+            category_paths.append(cat_name)
+
+    categories_str: str = ", ".join(category_paths) if category_paths else ""
 
     ingredients_lines: list[str] = []
     for ing in recipe.ingredients:
@@ -123,7 +137,9 @@ def _format_recipe_card(
             qty_unit_parts.append(html.escape(ing.unit))
 
         if qty_unit_parts:
-            ingredients_lines.append(f"• {ing_name} - {' '.join(qty_unit_parts)}")
+            ingredients_lines.append(
+                f"• {ing_name} - {' '.join(qty_unit_parts)}",
+            )
         else:
             ingredients_lines.append(f"• {ing_name}")
 
@@ -135,7 +151,7 @@ def _format_recipe_card(
         locale=locale,
         title=title,
         prep_time=recipe.prep_time_minutes,
-        category=category_name,
+        category=categories_str,
         ingredients=ingredients_str,
         instructions=instructions_str,
     )

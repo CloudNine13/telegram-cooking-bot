@@ -55,6 +55,6 @@ class Category(Base, TimestampMixin):
     )
     recipes: Mapped[list["Recipe"]] = relationship(
         "Recipe",
-        back_populates="category",
-        cascade="all, delete-orphan",
+        secondary="recipe_categories",
+        back_populates="categories",
     )
