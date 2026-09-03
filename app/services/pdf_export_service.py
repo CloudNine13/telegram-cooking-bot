@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.i18n.helpers import get_localized_text
+from app.schemas.category import CategoryDTO
 from app.schemas.recipe import RecipeDTO
 
 
@@ -124,12 +125,17 @@ class PdfExportService:
         output_pdf_path: Path = self.temp_base_dir / f"recipe_{unique_id}.pdf"
 
         title: str = get_localized_text(recipe.title, locale=locale)
-        category_name: str = ""
-        if recipe.category is not None:
-            category_name = get_localized_text(
-                recipe.category.name,
-                locale=locale,
-            )
+        cat_names: list[str] = []
+        sorted_cats: list[CategoryDTO] = sorted(
+            recipe.categories,
+            key=lambda c: (c.parent_id is not None, c.order_index, c.id),
+        )
+        for c in sorted_cats:
+            c_name: str = get_localized_text(c.name, locale=locale)
+            if c_name and c_name not in cat_names:
+                cat_names.append(c_name)
+
+        category_name: str = ", ".join(cat_names)
 
         instructions: str = recipe.instructions
 
