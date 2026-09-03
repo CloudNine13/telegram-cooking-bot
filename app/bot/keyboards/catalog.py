@@ -68,6 +68,18 @@ def get_subcategories_keyboard(
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
+    builder.row(
+        InlineKeyboardButton(
+            text=t("btn_all_recipes", locale=locale),
+            callback_data=CatalogNavCallback(
+                category_id=parent.id,
+                parent_id=parent.id,
+                page=1,
+                sort_order=SortOrder.DATE_ADDED,
+            ).pack(),
+        ),
+    )
+
     for subcategory in subcategories:
         name: str = get_localized_text(subcategory.name, locale=locale)
         builder.button(
@@ -80,7 +92,7 @@ def get_subcategories_keyboard(
             ).pack(),
         )
 
-    builder.adjust(2)
+    builder.adjust(1, 2)
 
     builder.row(
         InlineKeyboardButton(
@@ -116,6 +128,7 @@ def get_recipes_list_keyboard(
                     recipe_id=recipe.id,
                     source="catalog",
                     category_id=category_id,
+                    parent_id=parent_id,
                     page=current_page,
                 ).pack(),
             ),
@@ -226,6 +239,7 @@ def get_recipe_view_keyboard(
     category_id: int | None = None,
     page: int = 1,
     is_admin: bool = False,
+    parent_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
 
@@ -317,6 +331,7 @@ def get_recipe_view_keyboard(
     if source == "catalog":
         back_callback_str = CatalogNavCallback(
             category_id=category_id,
+            parent_id=parent_id,
             page=page,
         ).pack()
     elif source == "favorites":

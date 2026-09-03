@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Any
 
 from redis.asyncio import Redis
@@ -319,3 +320,37 @@ class RecipeService:
 
     async def get_user_favorite_recipe_ids(self, user_id: int) -> set[int]:
         return await self.favorite_repo.get_user_favorite_recipe_ids(user_id)
+
+    @staticmethod
+    def parse_ingredient_line(
+        line: str,
+    ) -> tuple[str, float | None, str | None]:
+        cleaned_line: str = line.strip().lstrip("-*• ").strip()
+        if not cleaned_line:
+            return "", None, None
+
+        delimiter: str | None = None
+        for candidate in (" - ", " – ", " — ", "-", "–", "—"):
+            if candidate in cleaned_line:
+                delimiter = candidate
+                break
+
+        if delimiter is not None:
+            parts: list[str] = cleaned_line.split(delimiter, 1)
+            name: str = parts[0].strip()
+            amount_str: str = parts[1].strip()
+
+            qty_match = re.match(r"^([\d\.,]+)\s*(.*)$", amount_str)
+            if qty_match:
+                try:
+                    qty: float = float(qty_match.group(1).replace(",", "."))
+                    unit_raw: str = qty_match.group(2).strip()
+                    unit: str | None = unit_raw[:50] if unit_raw else None
+
+                    return name, qty, unit
+                except ValueError:
+                    return name, None, amount_str[:50] if amount_str else None
+
+            return name, None, amount_str[:50] if amount_str else None
+
+        return cleaned_line, None, None
