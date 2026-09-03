@@ -14,4 +14,3 @@ __all__: list[str] = [
     "RecipeCreateWizard",
     "RecipeEditWizard",
 ]
-

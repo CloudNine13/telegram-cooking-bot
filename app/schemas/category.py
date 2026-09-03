@@ -59,5 +59,4 @@ class CategoryDTO(BaseModel):
         return data
 
 
-
 CategoryDTO.model_rebuild()
