@@ -14,6 +14,7 @@ class RecipeViewCallback(CallbackData, prefix="recipe_view"):
     recipe_id: int
     source: str = "catalog"
     category_id: int | None = None
+    parent_id: int | None = None
     page: int = 1
 
 
